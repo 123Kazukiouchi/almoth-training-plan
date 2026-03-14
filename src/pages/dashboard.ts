@@ -210,7 +210,14 @@ function renderActivities(activities: IntervalsActivity[]) {
         const hrs = Math.floor(act.moving_time / 3600);
         const mins = Math.floor((act.moving_time % 3600) / 60);
         const timeStr = hrs > 0 ? `${hrs}h ${mins}m` : `${mins}m`;
-        const icon = act.type === 'Ride' ? icons.bike : act.type === 'Run' ? '🏃' : '💪';
+        let icon = icons.bike;
+        if (act.type === 'VirtualRide' || act.type === 'IndoorCycle' || act.name.includes('屋内')) {
+            icon = icons.indoorBike;
+        } else if (act.type === 'Run') {
+            icon = icons.run;
+        } else if (act.type === 'WeightTraining' || act.type === 'Strength' || act.name.includes('筋トレ')) {
+            icon = icons.weight;
+        }
         
         const tssVal = act.icu_training_load || act.tss || '-';
         const npStr = act.normalized_watts ? `<span style="margin-left:8px;" title="Normalized Power">⚡${Math.round(act.normalized_watts)}W</span>` : '';
