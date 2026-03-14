@@ -1,6 +1,7 @@
 // AI Chat page
 
 import { renderSidebar, renderTopBar } from '../components/sidebar';
+import { storage } from '../utils/storage';
 import { icons } from '../components/icons';
 
 export function renderAiChat(): string {
@@ -88,7 +89,7 @@ export function initAiChat() {
         if (!text) return;
 
         // Ensure configured
-        if (!localStorage.getItem('gemini_api_key')) {
+        if (!storage.getItem('gemini_api_key')) {
             alert('設定画面からGemini APIキーを登録してください。');
             return;
         }
@@ -146,9 +147,9 @@ export function initAiChat() {
                 const planId = 'chat_' + Date.now().toString();
                 const planTitle = `AIチャット提案プラン`;
                 const planDate = new Date().toLocaleDateString('ja-JP');
-                const saved = JSON.parse(localStorage.getItem('saved_plans') || '[]');
+                const saved = JSON.parse(storage.getItem('saved_plans') || '[]');
                 saved.unshift({ id: planId, title: planTitle, content: aiResponseText, date: planDate });
-                localStorage.setItem('saved_plans', JSON.stringify(saved.slice(0, 10)));
+                storage.setItem('saved_plans', JSON.stringify(saved.slice(0, 10)));
                 
                 addToCalendarBtn = `
                 <div style="margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--color-border-light);">
@@ -203,7 +204,7 @@ export function initAiChat() {
 
     // Handle applying plan from chat
     (window as any).chatApplyPlanToCalendar = (planId: string) => {
-        const savedPlans = JSON.parse(localStorage.getItem('saved_plans') || '[]');
+        const savedPlans = JSON.parse(storage.getItem('saved_plans') || '[]');
         const plan = savedPlans.find((p: any) => p.id === planId);
         if (!plan) return;
 
@@ -217,7 +218,7 @@ export function initAiChat() {
         }
 
         const lines = plan.content.split('\n');
-        const scheduled = JSON.parse(localStorage.getItem('scheduled_workouts') || '[]');
+        const scheduled = JSON.parse(storage.getItem('scheduled_workouts') || '[]');
         let currentWeek = 0;
 
         for (let i = 0; i < lines.length; i++) {
@@ -256,7 +257,7 @@ export function initAiChat() {
             }
         }
 
-        localStorage.setItem('scheduled_workouts', JSON.stringify(scheduled));
+        storage.setItem('scheduled_workouts', JSON.stringify(scheduled));
         alert('カレンダーにトレーニング予定を適用しました！\\nカレンダー画面に移動します。');
         window.location.hash = '#/calendar';
     };

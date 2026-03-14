@@ -22,8 +22,22 @@ export function getCurrentRoute(): string {
   return window.location.hash.slice(1) || '/login';
 }
 
+import { getCurrentUser } from './services/authService';
+
 export async function handleRouteChange() {
   const path = getCurrentRoute();
+  
+  // Auth Guard
+  const user = getCurrentUser();
+  if (!user && path !== '/login') {
+    window.location.hash = '/login';
+    return;
+  }
+  if (user && path === '/login') {
+    window.location.hash = '/dashboard';
+    return;
+  }
+
   const route = routes.find(r => r.path === path);
   
   if (route) {

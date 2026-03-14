@@ -2,6 +2,7 @@
 
 import { renderSidebar, renderTopBar } from '../components/sidebar';
 import { icons } from '../components/icons';
+import { storage } from '../utils/storage';
 import { generateAiResponse, resetConversation } from '../services/aiService';
 
 // Sample plan templates shown to the user for inspiration
@@ -199,7 +200,7 @@ export function initPlans() {
     // Populate goals dropdown
     const goalsSelect = document.getElementById('plan-linked-goal') as HTMLSelectElement;
     if (goalsSelect) {
-      const savedGoals = JSON.parse(localStorage.getItem('user_goals') || '[]');
+      const savedGoals = JSON.parse(storage.getItem('user_goals') || '[]');
       goalsSelect.innerHTML = '<option value="">-- 目標を選択しない --</option>' + 
         savedGoals.map((g: any, i: number) => `<option value="${i}">${g.name} (${g.period})</option>`).join('');
     }
@@ -221,11 +222,11 @@ export function initPlans() {
     if (container) container.innerHTML = '';
     document.getElementById('plans-list')!.style.display = 'none';
     document.getElementById('plan-examples-section')!.style.display = 'block';
-    localStorage.removeItem('saved_plans');
+    storage.removeItem('saved_plans');
   });
 
   // Restore saved plans from localStorage
-  const savedPlans = localStorage.getItem('saved_plans');
+  const savedPlans = storage.getItem('saved_plans');
   if (savedPlans) {
     try {
       const plans = JSON.parse(savedPlans) as { id?: string; title: string; content: string; date: string }[];
@@ -253,7 +254,7 @@ async function generatePlan() {
   const weightFreq = (document.getElementById('plan-weight-freq') as HTMLSelectElement).value;
   const extra = (document.getElementById('plan-extra') as HTMLTextAreaElement).value;
 
-  if (!localStorage.getItem('gemini_api_key')) {
+  if (!storage.getItem('gemini_api_key')) {
     alert('設定画面からGemini APIキーを登録してください。');
     return;
   }
@@ -261,7 +262,7 @@ async function generatePlan() {
   // Get selected goal details
   let linkedGoalInfo = "";
   if (linkedGoalIdx !== "") {
-    const savedGoals = JSON.parse(localStorage.getItem('user_goals') || '[]');
+    const savedGoals = JSON.parse(storage.getItem('user_goals') || '[]');
     const goal = savedGoals[parseInt(linkedGoalIdx)];
     if (goal) {
       linkedGoalInfo = `【関連目標】\n- 目標名: ${goal.name}\n- 期間: ${goal.period}\n- ターゲット値: ${goal.target || 'なし'}\n`;
@@ -342,9 +343,9 @@ ${extra ? `- 追加希望事項: ${extra}` : ''}
     const planId = Date.now().toString();
     const planTitle = `${goalLabels[goalType]} ${duration}週間プラン`;
     const planDate = new Date().toLocaleDateString('ja-JP');
-    const saved = JSON.parse(localStorage.getItem('saved_plans') || '[]');
+    const saved = JSON.parse(storage.getItem('saved_plans') || '[]');
     saved.unshift({ id: planId, title: planTitle, content: result, date: planDate });
-    localStorage.setItem('saved_plans', JSON.stringify(saved.slice(0, 10)));
+    storage.setItem('saved_plans', JSON.stringify(saved.slice(0, 10)));
 
     // Hide modal and show the plan card
     const modal = document.getElementById('plan-modal');
@@ -367,11 +368,11 @@ ${extra ? `- 追加希望事項: ${extra}` : ''}
 (window as any).deletePlan = (planId: string) => {
   if (!confirm('このプランを削除してもよろしいですか？')) return;
   
-  const saved = JSON.parse(localStorage.getItem('saved_plans') || '[]');
+  const saved = JSON.parse(storage.getItem('saved_plans') || '[]');
   const filtered = saved.filter((p: any) => p.id !== planId && p.id !== undefined && p.id !== null); // safety
   // Also handle old plans without IDs by just clearing them if needed or finding by title (riskier)
   // For now, let's just filter by ID
-  localStorage.setItem('saved_plans', JSON.stringify(filtered));
+  storage.setItem('saved_plans', JSON.stringify(filtered));
   
   const card = document.querySelector(`[data-plan-id="${planId}"]`);
   if (card) {
@@ -403,7 +404,7 @@ ${extra ? `- 追加希望事項: ${extra}` : ''}
  * Edit plan (show textarea)
  */
 (window as any).editPlan = (planId: string) => {
-    const saved = JSON.parse(localStorage.getItem('saved_plans') || '[]');
+    const saved = JSON.parse(storage.getItem('saved_plans') || '[]');
     const plan = saved.find((p: any) => p.id === planId);
     if (!plan) return;
 
@@ -438,11 +439,11 @@ ${extra ? `- 追加希望事項: ${extra}` : ''}
     if (!textarea) return;
 
     const newContent = textarea.value;
-    const saved = JSON.parse(localStorage.getItem('saved_plans') || '[]');
+    const saved = JSON.parse(storage.getItem('saved_plans') || '[]');
     const planIndex = saved.findIndex((p: any) => p.id === planId);
     if (planIndex !== -1) {
         saved[planIndex].content = newContent;
-        localStorage.setItem('saved_plans', JSON.stringify(saved));
+        storage.setItem('saved_plans', JSON.stringify(saved));
         
         // Re-render
         const cardContainer = document.getElementById('plans-cards-container');
@@ -456,7 +457,7 @@ ${extra ? `- 追加希望事項: ${extra}` : ''}
  * Apply the plan to the calendar by parsing the text
  */
 (window as any).applyPlanToCalendar = (planId: string) => {
-  const savedPlans = JSON.parse(localStorage.getItem('saved_plans') || '[]');
+  const savedPlans = JSON.parse(storage.getItem('saved_plans') || '[]');
   const plan = savedPlans.find((p: any) => p.id === planId);
   if (!plan) return;
 
@@ -472,7 +473,7 @@ ${extra ? `- 追加希望事項: ${extra}` : ''}
   // Very basic parser for the generated plan structure
   // expects "### 第X週" and "- **月**: [メニュー名]..."
   const lines = plan.content.split('\n');
-  const scheduled = JSON.parse(localStorage.getItem('scheduled_workouts') || '[]');
+  const scheduled = JSON.parse(storage.getItem('scheduled_workouts') || '[]');
   
   let currentWeek = 0;
   
@@ -520,7 +521,7 @@ ${extra ? `- 追加希望事項: ${extra}` : ''}
     }
   }
 
-  localStorage.setItem('scheduled_workouts', JSON.stringify(scheduled));
+  storage.setItem('scheduled_workouts', JSON.stringify(scheduled));
   alert('カレンダーにトレーニング予定を適用しました！\\nカレンダー画面に移動します。');
   
   // Custom router redirect

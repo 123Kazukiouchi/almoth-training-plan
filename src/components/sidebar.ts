@@ -19,6 +19,8 @@ const mainNavItems: NavItem[] = [
     { id: 'subscription', label: 'サブスクリプション', icon: icons.subscription, path: '/subscription' },
 ];
 
+import { getCurrentUser, logout } from '../services/authService';
+
 const bottomNavItems: NavItem[] = [
     { id: 'guide', label: '導入ガイド', icon: icons.guide, path: '/guide' },
     { id: 'settings', label: '設定', icon: icons.settings, path: '/settings' },
@@ -50,18 +52,28 @@ export function renderSidebar(): string {
       </nav>
       <div class="sidebar-bottom">
         ${bottomNavItems.map(renderNavItem).join('')}
+        <a class="sidebar-nav-item" id="nav-logout" style="color: var(--color-danger); opacity: 0.8;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+          <span>ログアウト</span>
+        </a>
       </div>
     </aside>
   `;
 }
 
 export function renderTopBar(): string {
+    const user = getCurrentUser();
+    const initial = user?.email[0].toUpperCase() || '?';
+    
     return `
     <div class="top-bar">
       <button class="mobile-menu-btn" id="mobile-menu-btn">
         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
       </button>
-      <div class="user-avatar" id="user-avatar">BE</div>
+      <div class="user-info-bar" style="display: flex; align-items: center; gap: 12px;">
+        <span style="font-size: 0.8rem; color: var(--color-text-muted); display: none; md:inline;">${user?.email}</span>
+        <div class="user-avatar" id="user-avatar" style="cursor: pointer; background: var(--color-primary); color: white;">${initial}</div>
+      </div>
     </div>
   `;
 }
@@ -77,6 +89,23 @@ export function initSidebar() {
             }
         });
     });
+
+    const logoutBtn = document.getElementById('nav-logout');
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            if (confirm('ログアウトしますか？')) {
+                logout();
+            }
+        });
+    }
+
+    const avatar = document.getElementById('user-avatar');
+    if (avatar) {
+        avatar.addEventListener('click', () => {
+             navigate('/settings');
+        });
+    }
 
     const mobileBtn = document.getElementById('mobile-menu-btn');
     if (mobileBtn) {

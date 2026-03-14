@@ -2,7 +2,9 @@
 
 import { renderSidebar, renderTopBar } from '../components/sidebar';
 import { icons } from '../components/icons';
+import { storage } from '../utils/storage';
 import { syncIntervalsData } from '../services/intervalsSync';
+import { logout } from '../services/authService';
 
 export function renderSettings(): string {
   return `
@@ -178,6 +180,13 @@ export function renderSettings(): string {
       <div class="settings-section">
         <h2 class="settings-section-title">アカウント</h2>
         <div class="card">
+          <div style="display: flex; align-items: center; justify-content: space-between; padding-bottom: 16px; border-bottom: 1px solid var(--color-border-light); margin-bottom: 16px;">
+            <div>
+              <div style="font-weight: 600;">ログアウト</div>
+              <div style="font-size: 0.8rem; color: var(--color-text-muted);">現在のアカウントからサインアウトします</div>
+            </div>
+            <button class="btn btn-outline" id="btn-logout-settings" style="color: var(--color-danger); border-color: var(--color-danger);">ログアウト</button>
+          </div>
           <div style="display: flex; align-items: center; justify-content: space-between;">
             <div>
               <div style="font-weight: 600; color: var(--color-danger);">アカウントを削除</div>
@@ -197,16 +206,16 @@ export function initSettings() {
   const ftpInput = document.getElementById('input-ftp') as HTMLInputElement;
   const maxHrInput = document.getElementById('input-max-hr') as HTMLInputElement;
 
-  if (weightInput) weightInput.value = localStorage.getItem('user_weight') || '68';
-  if (ftpInput) ftpInput.value = localStorage.getItem('user_ftp') || '211';
-  if (maxHrInput) maxHrInput.value = localStorage.getItem('user_max_hr') || '190';
+  if (weightInput) weightInput.value = storage.getItem('user_weight') || '68';
+  if (ftpInput) ftpInput.value = storage.getItem('user_ftp') || '211';
+  if (maxHrInput) maxHrInput.value = storage.getItem('user_max_hr') || '190';
 
   // Profile save logic
   document.getElementById('btn-save-profile')?.addEventListener('click', () => {
     const btn = document.getElementById('btn-save-profile');
-    if (weightInput) localStorage.setItem('user_weight', weightInput.value);
-    if (ftpInput) localStorage.setItem('user_ftp', ftpInput.value);
-    if (maxHrInput) localStorage.setItem('user_max_hr', maxHrInput.value);
+    if (weightInput) storage.setItem('user_weight', weightInput.value);
+    if (ftpInput) storage.setItem('user_ftp', ftpInput.value);
+    if (maxHrInput) storage.setItem('user_max_hr', maxHrInput.value);
 
     if (btn) {
       btn.textContent = '保存しました ✓';
@@ -226,13 +235,13 @@ export function initSettings() {
   const validSourcesInput = document.getElementById('intervals-valid-sources') as HTMLInputElement;
 
   if (athleteIdInput) {
-    athleteIdInput.value = localStorage.getItem('intervals_athlete_id') || '';
+    athleteIdInput.value = storage.getItem('intervals_athlete_id') || '';
   }
   if (apiKeyInput) {
-    apiKeyInput.value = localStorage.getItem('intervals_api_key') || '';
+    apiKeyInput.value = storage.getItem('intervals_api_key') || '';
   }
   if (validSourcesInput) {
-    validSourcesInput.value = localStorage.getItem('valid_activity_sources') || '';
+    validSourcesInput.value = storage.getItem('valid_activity_sources') || '';
   }
 
   // Intervals Connection Save
@@ -247,9 +256,9 @@ export function initSettings() {
         return;
       }
 
-      localStorage.setItem('intervals_athlete_id', athleteId);
-      localStorage.setItem('intervals_api_key', apiKey);
-      localStorage.setItem('valid_activity_sources', validSources);
+      storage.setItem('intervals_athlete_id', athleteId);
+      storage.setItem('intervals_api_key', apiKey);
+      storage.setItem('valid_activity_sources', validSources);
 
       const btn = document.getElementById('btn-save-intervals') as HTMLButtonElement;
       if (!btn) return;
@@ -280,9 +289,9 @@ export function initSettings() {
           const weightInput = document.getElementById('input-weight') as HTMLInputElement;
           const ftpInput = document.getElementById('input-ftp') as HTMLInputElement;
           const maxHrInput = document.getElementById('input-max-hr') as HTMLInputElement;
-          if (weightInput) weightInput.value = localStorage.getItem('user_weight') || weightInput.value;
-          if (ftpInput) ftpInput.value = localStorage.getItem('user_ftp') || ftpInput.value;
-          if (maxHrInput) maxHrInput.value = localStorage.getItem('user_max_hr') || maxHrInput.value;
+          if (weightInput) weightInput.value = storage.getItem('user_weight') || weightInput.value;
+          if (ftpInput) ftpInput.value = storage.getItem('user_ftp') || ftpInput.value;
+          if (maxHrInput) maxHrInput.value = storage.getItem('user_max_hr') || maxHrInput.value;
 
         } else {
           btn.innerHTML = `<span>データなし</span>`;
@@ -294,7 +303,7 @@ export function initSettings() {
         btn.style.color = 'white';
 
         // Remove invalid credentials
-        localStorage.removeItem('intervals_api_key');
+        storage.removeItem('intervals_api_key');
       } finally {
         setTimeout(() => {
           btn.disabled = false;
@@ -310,12 +319,12 @@ export function initSettings() {
   // Hevy Settings
   const hevyApiKeyInput = document.getElementById('hevy-api-key') as HTMLInputElement;
   if (hevyApiKeyInput) {
-    hevyApiKeyInput.value = localStorage.getItem('hevy_api_key') || '';
+    hevyApiKeyInput.value = storage.getItem('hevy_api_key') || '';
   }
 
   document.getElementById('btn-save-hevy')?.addEventListener('click', () => {
     if (hevyApiKeyInput) {
-      localStorage.setItem('hevy_api_key', hevyApiKeyInput.value.trim());
+      storage.setItem('hevy_api_key', hevyApiKeyInput.value.trim());
       const btn = document.getElementById('btn-save-hevy') as HTMLButtonElement;
       if (btn) {
         btn.textContent = '保存しました ✓';
@@ -335,11 +344,11 @@ export function initSettings() {
   const geminiModelSelect = document.getElementById('gemini-model-select') as HTMLSelectElement;
 
   if (geminiKeyInput) {
-    geminiKeyInput.value = localStorage.getItem('gemini_api_key') || '';
+    geminiKeyInput.value = storage.getItem('gemini_api_key') || '';
   }
 
   if (geminiModelSelect) {
-      const savedModel = localStorage.getItem('gemini_model');
+      const savedModel = storage.getItem('gemini_model');
       if (savedModel) {
           // Add to options if not present
           if (!Array.from(geminiModelSelect.options).some(opt => opt.value === savedModel)) {
@@ -382,7 +391,7 @@ export function initSettings() {
                });
                
                // Attempt to restore selection
-               const current = localStorage.getItem('gemini_model') || 'gemini-1.5-flash';
+               const current = storage.getItem('gemini_model') || 'gemini-1.5-flash';
                if (Array.from(geminiModelSelect.options).some(opt => opt.value === current)) {
                    geminiModelSelect.value = current;
                }
@@ -400,8 +409,8 @@ export function initSettings() {
 
   document.getElementById('btn-save-ai')?.addEventListener('click', () => {
     if (geminiKeyInput && geminiModelSelect) {
-        localStorage.setItem('gemini_api_key', geminiKeyInput.value.trim());
-        localStorage.setItem('gemini_model', geminiModelSelect.value);
+        storage.setItem('gemini_api_key', geminiKeyInput.value.trim());
+        storage.setItem('gemini_model', geminiModelSelect.value);
         const btn = document.getElementById('btn-save-ai') as HTMLButtonElement;
         if (btn) {
             btn.textContent = '保存しました ✓';
@@ -413,6 +422,13 @@ export function initSettings() {
                 btn.classList.remove('btn-outline');
             }, 2000);
         }
+    }
+  });
+
+  // Logout from settings
+  document.getElementById('btn-logout-settings')?.addEventListener('click', () => {
+    if (confirm('ログアウトしますか？')) {
+      logout();
     }
   });
 }

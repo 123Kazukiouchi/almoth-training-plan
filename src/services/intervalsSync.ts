@@ -1,3 +1,4 @@
+import { storage } from '../utils/storage';
 // Intervals.icu API integration service
 
 const BASE_URL = 'https://intervals.icu/api/v1';
@@ -137,6 +138,16 @@ export interface IntervalsActivity {
 }
 
 /**
+ * ユーザーごとのIntervals.icu認証情報を取得する
+ */
+export function getIntervalsCredentials() {
+    return {
+        athleteId: storage.getItem('intervals_athlete_id') || '',
+        apiKey: storage.getItem('intervals_api_key') || ''
+    };
+}
+
+/**
  * 認証ヘッダーを生成する
  */
 function getAuthHeaders(apiKey: string): Headers {
@@ -177,8 +188,7 @@ export async function fetchAthleteProfile(athleteId: string, apiKey: string): Pr
  * 保存されている認証情報を使ってプロフィールを取得する
  */
 export async function syncIntervalsData(): Promise<boolean> {
-    const athleteId = localStorage.getItem('intervals_athlete_id');
-    const apiKey = localStorage.getItem('intervals_api_key');
+    const { athleteId, apiKey } = getIntervalsCredentials();
 
     if (!athleteId || !apiKey) {
         throw new Error('認証情報が設定されていません。設定画面で入力してください。');
@@ -193,9 +203,9 @@ export async function syncIntervalsData(): Promise<boolean> {
             const weight = profile.weight || profile.icu_weight;
             const maxHR = profile.maxHR || profile.max_hr || profile.icu_max_hr;
 
-            if (ftp) localStorage.setItem('user_ftp', ftp.toString());
-            if (weight) localStorage.setItem('user_weight', weight.toString());
-            if (maxHR) localStorage.setItem('user_max_hr', maxHR.toString());
+            if (ftp) storage.setItem('user_ftp', ftp.toString());
+            if (weight) storage.setItem('user_weight', weight.toString());
+            if (maxHR) storage.setItem('user_max_hr', maxHR.toString());
 
             console.log('Intervals.icuからのデータ同期が完了しました:', profile);
             return true;
@@ -211,8 +221,7 @@ export async function syncIntervalsData(): Promise<boolean> {
  * GET /api/v1/athlete/{id}/wellness{?oldest,newest}
  */
 export async function fetchWellness(oldest: string, newest: string): Promise<IntervalsWellness[]> {
-    const athleteId = localStorage.getItem('intervals_athlete_id');
-    const apiKey = localStorage.getItem('intervals_api_key');
+    const { athleteId, apiKey } = getIntervalsCredentials();
 
     if (!athleteId || !apiKey) return [];
 
@@ -236,8 +245,7 @@ export async function fetchWellness(oldest: string, newest: string): Promise<Int
  * GET /api/v1/athlete/{id}/activities{?oldest,newest}
  */
 export async function fetchActivities(oldest: string, newest: string): Promise<IntervalsActivity[]> {
-    const athleteId = localStorage.getItem('intervals_athlete_id');
-    const apiKey = localStorage.getItem('intervals_api_key');
+    const { athleteId, apiKey } = getIntervalsCredentials();
 
     if (!athleteId || !apiKey) return [];
 
@@ -252,7 +260,7 @@ export async function fetchActivities(oldest: string, newest: string): Promise<I
         const rawActivities = await response.json() as IntervalsActivity[];
         
         // 1. ソースでフィルタリング
-        const validSourcesStr = localStorage.getItem('valid_activity_sources');
+        const validSourcesStr = storage.getItem('valid_activity_sources');
         let filtered = rawActivities;
         if (validSourcesStr) {
             const validSources = validSourcesStr.split(',').map(s => s.trim().toLowerCase()).filter(s => s.length > 0);
@@ -308,7 +316,7 @@ export async function fetchActivities(oldest: string, newest: string): Promise<I
  * GET /api/v1/activity/{id}
  */
 export async function fetchActivityDetails(activityId: string): Promise<any> {
-    const apiKey = localStorage.getItem('intervals_api_key');
+    const { apiKey } = getIntervalsCredentials();
     if (!apiKey) return null;
 
     try {

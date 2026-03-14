@@ -402,6 +402,12 @@ ${contextStr}
     }
 }
 
+import { storage } from '../utils/storage';
+
+/**
+ * AI Service - handles all interactions with the Gemini API
+ */
+
 /**
  * アスリートレベル（Progression Levels）の型定義
  */
@@ -432,10 +438,10 @@ const DEFAULT_LEVELS: ProgressionLevels = {
  * 過去90日間のデータを考慮し、より精度の高い初期レベル設定を行う
  */
 export async function evaluateProgressionLevels(activities: any[]): Promise<ProgressionLevels> {
-    const apiKey = localStorage.getItem('gemini_api_key');
-    if (!apiKey) return JSON.parse(localStorage.getItem('athlete_levels') || JSON.stringify(DEFAULT_LEVELS));
+    const apiKey = storage.getItem('gemini_api_key');
+    if (!apiKey) return JSON.parse(storage.getItem('athlete_levels') || JSON.stringify(DEFAULT_LEVELS));
 
-    const savedModel = localStorage.getItem('gemini_model') || 'gemini-1.5-flash';
+    const savedModel = storage.getItem('gemini_model') || 'gemini-1.5-flash';
     const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${savedModel}:generateContent`;
 
     // 過去90日のアクティビティを対象にしてより深く分析する
@@ -444,7 +450,7 @@ export async function evaluateProgressionLevels(activities: any[]): Promise<Prog
         return (new Date().getTime() - d.getTime()) < 90 * 24 * 60 * 60 * 1000;
     });
 
-    const currentLevels = JSON.parse(localStorage.getItem('athlete_levels') || JSON.stringify(DEFAULT_LEVELS));
+    const currentLevels = JSON.parse(storage.getItem('athlete_levels') || JSON.stringify(DEFAULT_LEVELS));
 
     const prompt = `
 あなたはプロのサイクリング・データアナリストです。ユーザーの長期間（最大90日間）のアクティビティデータに基づき、アスリートの「プログレッションレベル (1.0〜10.0)」を精密に再評価してください。
@@ -478,7 +484,7 @@ JSON構造: {"endurance": FLOAT, "tempo": FLOAT, "sweetSpot": FLOAT, "threshold"
         const aiJson = JSON.parse(data.candidates?.[0]?.content?.parts?.[0]?.text);
         
         const newLevels = { ...aiJson, lastUpdate: new Date().toISOString() };
-        localStorage.setItem('athlete_levels', JSON.stringify(newLevels));
+        storage.setItem('athlete_levels', JSON.stringify(newLevels));
         return newLevels;
     } catch (e) {
         console.error('Level evaluation failed:', e);
@@ -490,10 +496,10 @@ JSON構造: {"endurance": FLOAT, "tempo": FLOAT, "sweetSpot": FLOAT, "threshold"
  * 特定のワークアウトを完了した際のレベル向上を予測する
  */
 export async function predictLevelUp(workout: { title: string, description: string }): Promise<Partial<ProgressionLevels>> {
-    const apiKey = localStorage.getItem('gemini_api_key');
+    const apiKey = storage.getItem('gemini_api_key');
     if (!apiKey) return {};
 
-    const savedModel = localStorage.getItem('gemini_model') || 'gemini-1.5-flash';
+    const savedModel = storage.getItem('gemini_model') || 'gemini-1.5-flash';
     const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${savedModel}:generateContent`;
 
     const prompt = `
@@ -531,14 +537,14 @@ JSON構造例: {"endurance": 0.2, "tempo": 0.1} (向上する値のみ)
  * 過去のデータと未来の予定から、次回のFTPを予測する
  */
 export async function predictFutureFtp(): Promise<{ current: number, predicted: number, date: string, confidence: number }> {
-    const apiKey = localStorage.getItem('gemini_api_key');
-    const currentFtp = parseInt(localStorage.getItem('user_ftp') || '242');
-    const scheduled = JSON.parse(localStorage.getItem('scheduled_workouts') || '[]');
-    const levels = JSON.parse(localStorage.getItem('athlete_levels') || JSON.stringify(DEFAULT_LEVELS));
+    const apiKey = storage.getItem('gemini_api_key');
+    const currentFtp = parseInt(storage.getItem('user_ftp') || '242');
+    const scheduled = JSON.parse(storage.getItem('scheduled_workouts') || '[]');
+    const levels = JSON.parse(storage.getItem('athlete_levels') || JSON.stringify(DEFAULT_LEVELS));
     
-    if (!apiKey) return { current: currentFtp, predicted: currentFtp, date: '---', confidence: 0 };
+    if (!apiKey) return { current: currentFtp, predicted: currentFtp, date: 'APIキー未設定', confidence: 0 };
 
-    const savedModel = localStorage.getItem('gemini_model') || 'gemini-1.5-flash';
+    const savedModel = storage.getItem('gemini_model') || 'gemini-1.5-flash';
     const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${savedModel}:generateContent`;
 
     const prompt = `
@@ -580,7 +586,7 @@ JSON構造例: {"predicted": 248, "days": 10, "confidence": 0.85}
             date: targetDate.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' }),
             confidence: aiJson.confidence
         };
-        localStorage.setItem('ftp_prediction', JSON.stringify(result));
+        storage.setItem('ftp_prediction', JSON.stringify(result));
         return result;
     } catch (e) {
         return { current: currentFtp, predicted: currentFtp, date: 'データ不足', confidence: 0 };
@@ -590,10 +596,10 @@ JSON構造例: {"predicted": 248, "days": 10, "confidence": 0.85}
  * 完了したアクティビティの内容を分析し、レベルへの影響やトレーニングの質を評価する
  */
 export async function analyzeActivityProgression(activity: any): Promise<{ advice: string, levels: Partial<ProgressionLevels> }> {
-    const apiKey = localStorage.getItem('gemini_api_key');
-    if (!apiKey) return { advice: 'APIキーが設定されていません。', levels: {} };
+    const apiKey = storage.getItem('gemini_api_key');
+    if (!apiKey) return { advice: 'APIキーが設定されていません。 設定画面で設定してください。', levels: {} };
 
-    const savedModel = localStorage.getItem('gemini_model') || 'gemini-1.5-flash';
+    const savedModel = storage.getItem('gemini_model') || 'gemini-1.5-flash';
     const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${savedModel}:generateContent`;
 
     const prompt = `

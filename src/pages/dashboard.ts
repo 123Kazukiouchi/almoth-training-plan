@@ -8,6 +8,7 @@ import { fetchHevyWorkouts } from '../services/hevySync';
 import type { IntervalsWellness, IntervalsActivity } from '../services/intervalsSync';
 import { showActivityModal } from '../components/activityModal';
 import { Chart, registerables } from 'chart.js';
+import { storage } from '../utils/storage';
 import { getDailyAdvice, evaluateProgressionLevels, predictFutureFtp, predictLevelUp } from '../services/aiService';
 
 Chart.register(...registerables);
@@ -107,7 +108,7 @@ function renderAthleteLevels(levels: any) {
     if (!container || !card) return;
 
     card.style.display = 'block';
-    const ftp = localStorage.getItem('user_ftp') || '---';
+    const ftp = storage.getItem('user_ftp') || '---';
     if (ftpBtn) ftpBtn.textContent = `${ftp} FTPに基づく`;
 
     const zones = [
@@ -296,7 +297,7 @@ export async function initDashboard() {
                 const prevAtl = weekAgoW.atl != null ? weekAgoW.atl : 0;
                 const prevTsb = weekAgoW.tsb != null ? weekAgoW.tsb : (prevCtl - prevAtl);
 
-                let weight = latestW.weight != null ? latestW.weight : parseFloat(localStorage.getItem('user_weight') || '0');
+                let weight = latestW.weight != null ? latestW.weight : parseFloat(storage.getItem('user_weight') || '0');
                 
                 let sleepStr = '-';
                 if (latestW.sleepSecs) {
@@ -312,7 +313,7 @@ export async function initDashboard() {
                     { label: '安静時心拍', labelEn: 'Resting HR', value: latestW.restingHR != null ? latestW.restingHR : '-', sub: 'bpm', iconColor: '#EC4899' },
                     { label: 'HRV', labelEn: 'rMSSD', value: latestW.hrv ? Math.round(latestW.hrv) : '-', sub: latestW.hrvScore ? `スコア: ${latestW.hrvScore}` : 'ms', iconColor: '#8B5CF6' },
                     { label: '睡眠', labelEn: 'Sleep', value: sleepStr, sub: latestW.sleepScore ? `スコア: ${latestW.sleepScore}` : '', iconColor: '#6366F1' },
-                    { label: 'FTP', labelEn: 'FTP', value: localStorage.getItem('user_ftp') || '-', sub: 'Watts', iconColor: '#F97316' },
+                    { label: 'FTP', labelEn: 'FTP', value: storage.getItem('user_ftp') || '-', sub: 'Watts', iconColor: '#F97316' },
                     { label: '体重', labelEn: 'Weight', value: weight > 0 ? weight : '-', sub: `体脂肪: ${latestW.bodyFat ? latestW.bodyFat + '%' : '-'}`, iconColor: '#F43F5E' }
                 ];
 
@@ -353,7 +354,7 @@ export async function initDashboard() {
                     // FTP History: check localStorage history or just current if same day
                     // In real Intervals API, wellness can have 'ftp' field if it changed
                     // For now, let's use the current FTP as fallback but look for history
-                    ftp.push(w.ftp || parseInt(localStorage.getItem('user_ftp') || '0'));
+                    ftp.push(w.ftp || parseInt(storage.getItem('user_ftp') || '0'));
                 }
                 renderChart({ labels, fitness, fatigue, form, hr, ftp });
             }
@@ -367,7 +368,7 @@ export async function initDashboard() {
                     if (applyBtn) {
                         applyBtn.addEventListener('click', () => {
                             if (confirm(`推定FTP ${pred.predicted}W をプロフィールに適用しますか？`)) {
-                                localStorage.setItem('user_ftp', pred.predicted.toString());
+                                storage.setItem('user_ftp', pred.predicted.toString());
                                 // Update UI metrics immediately
                                 loadDashboardData(); 
                             }
@@ -378,7 +379,7 @@ export async function initDashboard() {
 
             // Fetch scheduled workouts for today
             const todayStr = new Date().toISOString().split('T')[0];
-            const allScheduled = JSON.parse(localStorage.getItem('scheduled_workouts') || '[]');
+            const allScheduled = JSON.parse(storage.getItem('scheduled_workouts') || '[]');
             todaysWorkouts = allScheduled.filter((w: any) => w.date === todayStr);
             
             const adviceSection = document.getElementById('today-advice-section');
@@ -413,7 +414,7 @@ export async function initDashboard() {
                     const adviceContent = document.getElementById('advice-content');
                     if (!adviceContent) return;
                     
-                    if (!localStorage.getItem('gemini_api_key')) {
+                    if (!storage.getItem('gemini_api_key')) {
                         alert('設定画面からGemini APIキーを登録してください。');
                         return;
                     }
