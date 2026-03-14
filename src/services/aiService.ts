@@ -1,5 +1,7 @@
 import { fetchWellness, fetchActivities, fetchActivityDetails } from './intervalsSync';
 import { fetchHevyWorkouts } from './hevySync';
+import { storage } from '../utils/storage';
+
 
 // Dynamic URL generation will be done inside the request
 
@@ -26,13 +28,14 @@ export function resetConversation() {
  * ユーザーの現状の情報をIntervalsから集め、コンテキスト文字列を作成する
  */
 async function buildUserContext(): Promise<string> {
-    const athleteId = localStorage.getItem('intervals_athlete_id');
-    const intervalsKey = localStorage.getItem('intervals_api_key');
+    const athleteId = storage.getItem('intervals_athlete_id');
+    const intervalsKey = storage.getItem('intervals_api_key');
     
     // 基本プロフィール
-    const ftp = localStorage.getItem('user_ftp') || '未設定';
-    const weight = localStorage.getItem('user_weight') || '未設定';
-    const maxHr = localStorage.getItem('user_max_hr') || '未設定';
+    const ftp = storage.getItem('user_ftp') || '未設定';
+    const weight = storage.getItem('user_weight') || '未設定';
+    const maxHr = storage.getItem('user_max_hr') || '未設定';
+
 
     let contextData = `
 【ユーザー基本情報】
@@ -173,13 +176,14 @@ async function buildUserContext(): Promise<string> {
  * Gemini APIにメッセージを送信し、返答を得る
  */
 export async function generateAiResponse(userMessage: string): Promise<string> {
-    const apiKey = localStorage.getItem('gemini_api_key');
+    const apiKey = storage.getItem('gemini_api_key');
     if (!apiKey) {
         throw new Error('Gemini APIキーが設定されていません。設定画面から登録してください。');
     }
 
-    const savedModel = localStorage.getItem('gemini_model') || 'gemini-1.5-flash';
+    const savedModel = storage.getItem('gemini_model') || 'gemini-1.5-flash';
     const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${savedModel}:generateContent`;
+
 
     try {
         // システムプロンプト（初回のみコンテキスト付きで指示を出す）
@@ -273,13 +277,14 @@ ${contextStr}
  * 今日の予定とウェルネスデータをもとに、デイリーアドバイスを取得する
  */
 export async function getDailyAdvice(wellness: any, workouts: any[], recentActivities?: any[]): Promise<string> {
-    const apiKey = localStorage.getItem('gemini_api_key');
+    const apiKey = storage.getItem('gemini_api_key');
     if (!apiKey) {
         throw new Error('Gemini APIキーが設定されていません。');
     }
 
-    const savedModel = localStorage.getItem('gemini_model') || 'gemini-1.5-flash';
+    const savedModel = storage.getItem('gemini_model') || 'gemini-1.5-flash';
     const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${savedModel}:generateContent`;
+
 
     let wellnessStr = '(データなし)';
     if (wellness && Object.keys(wellness).length > 0) {
@@ -350,13 +355,14 @@ ${workoutStr}
  * 特定のトレーニングメニューに対して、最新のコンテキストに基づいた動的なアドバイスを取得する
  */
 export async function getDynamicWorkoutAdvice(workoutTitle: string, workoutDesc: string): Promise<string> {
-    const apiKey = localStorage.getItem('gemini_api_key');
+    const apiKey = storage.getItem('gemini_api_key');
     if (!apiKey) {
         throw new Error('Gemini APIキーが設定されていません。');
     }
 
-    const savedModel = localStorage.getItem('gemini_model') || 'gemini-1.5-flash';
+    const savedModel = storage.getItem('gemini_model') || 'gemini-1.5-flash';
     const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${savedModel}:generateContent`;
+
 
     try {
         const contextStr = await buildUserContext();
@@ -402,7 +408,7 @@ ${contextStr}
     }
 }
 
-import { storage } from '../utils/storage';
+
 
 /**
  * AI Service - handles all interactions with the Gemini API
