@@ -201,8 +201,26 @@ export function initPlans() {
     const goalsSelect = document.getElementById('plan-linked-goal') as HTMLSelectElement;
     if (goalsSelect) {
       const savedGoals = JSON.parse(storage.getItem('user_goals') || '[]');
+      const activeGoalId = storage.getItem('active_goal_id');
+      
       goalsSelect.innerHTML = '<option value="">-- 目標を選択しない --</option>' + 
-        savedGoals.map((g: any, i: number) => `<option value="${i}">${g.name} (${g.period})</option>`).join('');
+        savedGoals.map((g: any, i: number) => {
+          const isSelected = g.id === activeGoalId ? 'selected' : '';
+          return `<option value="${i}" ${isSelected}>${g.name} (${g.period})</option>`;
+        }).join('');
+
+      // If active goal selected, try to pre-fill some fields
+      if (activeGoalId) {
+        const activeGoal = savedGoals.find((g: any) => g.id === activeGoalId);
+        if (activeGoal) {
+          const goalTypeEl = document.getElementById('plan-goal-type') as HTMLSelectElement;
+          if (goalTypeEl && activeGoal.type) {
+             // Map goal type if possible
+             const typeMap: any = { 'ftp': 'ftp', 'race': 'race', 'profile': 'climbing', 'weight': 'weight' };
+             if (typeMap[activeGoal.type]) goalTypeEl.value = typeMap[activeGoal.type];
+          }
+        }
+      }
     }
 
     if (modal) modal.style.display = 'flex';
@@ -522,7 +540,7 @@ ${extra ? `- 追加希望事項: ${extra}` : ''}
   }
 
   storage.setItem('scheduled_workouts', JSON.stringify(scheduled));
-  alert('カレンダーにトレーニング予定を適用しました！\\nカレンダー画面に移動します。');
+  alert(`カレンダーに ${scheduled.length} 件のトレーニング予定を適用しました！\nカレンダー画面に移動します。`);
   
   // Custom router redirect
   window.location.hash = '#/calendar';

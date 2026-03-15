@@ -23,7 +23,14 @@ export function showActivityModal(activity: IntervalsActivity) {
     const hrs = Math.floor(activity.moving_time / 3600);
     const mins = Math.floor((activity.moving_time % 3600) / 60);
     const timeStr = hrs > 0 ? `${hrs}h ${mins}m` : `${mins}m`;
-    const icon = activity.type === 'Ride' ? icons.bike : activity.type === 'Run' ? '🏃' : '💪';
+    let icon = icons.bike;
+    if (activity.type === 'VirtualRide' || activity.type === 'IndoorCycle' || activity.name.includes('屋内')) {
+        icon = icons.indoorBike;
+    } else if (activity.type === 'Run') {
+        icon = icons.run;
+    } else if (activity.type === 'WeightTraining' || activity.type === 'Strength' || activity.name.includes('筋トレ')) {
+        icon = icons.weight;
+    }
 
     const tssVal = activity.icu_training_load || activity.tss || '-';
     
@@ -201,7 +208,7 @@ export function showHevyModal(hw: HevyWorkout, matchingActivity?: IntervalsActiv
             <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px;">
                 <div style="display: flex; gap: 16px; align-items: center;">
                     <div style="width: 48px; height: 48px; background: var(--color-primary-bg); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; color: var(--color-primary); flex-shrink: 0;">
-                        💪
+                        ${icons.weight}
                     </div>
                     <div>
                         <h2 class="modal-title" style="margin-bottom: 4px;">${hw.title}</h2>

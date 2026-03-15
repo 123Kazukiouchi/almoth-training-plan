@@ -38,7 +38,7 @@ export interface HevyResponse {
  * 今回は最大で最新ページ1つを取得し設定されている場合のみ返す簡易実装とする
  */
 export async function fetchHevyWorkouts(): Promise<HevyWorkout[]> {
-    const apiKey = localStorage.getItem('hevy_api_key');
+    const apiKey = storage.getItem('hevy_api_key');
     if (!apiKey) {
         return [];
     }

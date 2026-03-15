@@ -1604,11 +1604,49 @@ input, textarea, select {
 
   .metrics-grid {
     grid-template-columns: repeat(2, 1fr);
+    gap: var(--space-3);
+  }
+
+  .dashboard-grid-container {
+    grid-template-columns: 1fr;
+    gap: var(--space-4);
+  }
+
+  .plan-card, .onboarding-card {
+    padding: var(--space-4);
+  }
+
+  /* Adjust Page Header for Mobile */
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-4);
+  }
+
+  .page-header-actions {
+    width: 100%;
+    justify-content: flex-start;
+    overflow-x: auto;
+    padding-bottom: 8px;
   }
 
   /* Full width for chart on small screens */
   .chart-container {
     height: 250px;
+  }
+
+  .settings-form {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 600px) {
+  .metric-value {
+    font-size: 1.5rem;
+  }
+  
+  .sidebar {
+    width: 280px; /* Slightly wider for better touch targets */
   }
 }
 
@@ -1616,6 +1654,73 @@ input, textarea, select {
   .metrics-grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* Dashboard Activity Items */
+.dashboard-activity-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--color-border-light);
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.dashboard-activity-item:hover {
+  background: var(--color-bg);
+}
+
+.dashboard-activity-icon-wrap {
+  width: 40px;
+  height: 40px;
+  background: var(--color-primary-bg);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-primary);
+  flex-shrink: 0;
+}
+
+.dashboard-activity-icon-wrap svg {
+  width: 24px;
+  height: 24px;
+}
+
+.dashboard-activity-info {
+  flex: 1;
+  min-width: 0;
+  margin-left: 12px;
+}
+
+.dashboard-activity-item-title {
+  font-weight: 600;
+  font-size: 0.95rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dashboard-activity-item-meta {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.metric-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.calendar-activity-detail svg {
+  width: 14px;
+  height: 14px;
+  display: inline-block;
+  vertical-align: middle;
 }
 
 /* ======== Onboarding Guide ======== */

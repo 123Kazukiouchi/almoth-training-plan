@@ -4,9 +4,13 @@ import { renderSidebar, renderTopBar } from '../components/sidebar';
 import { icons } from '../components/icons';
 import { storage } from '../utils/storage';
 import { syncIntervalsData } from '../services/intervalsSync';
-import { logout } from '../services/authService';
+import { logout, getCachedUser } from '../services/authService';
 
 export function renderSettings(): string {
+  const user = getCachedUser();
+  const email = user?.email || 'guest@example.com';
+  const displayName = email.split('@')[0].toUpperCase();
+
   return `
     ${renderSidebar()}
     ${renderTopBar()}
@@ -27,11 +31,11 @@ export function renderSettings(): string {
           <div class="settings-form">
             <div class="form-group">
               <label class="form-label">表示名</label>
-              <input class="form-input" type="text" value="BE" />
+              <input class="form-input" type="text" value="${displayName}" disabled />
             </div>
             <div class="form-group">
               <label class="form-label">メールアドレス</label>
-              <input class="form-input" type="email" value="i135103@example.com" />
+              <input class="form-input" type="email" value="${email}" disabled />
             </div>
             <div class="form-group">
               <label class="form-label">生年月日</label>
@@ -430,5 +434,45 @@ export function initSettings() {
     if (confirm('ログアウトしますか？')) {
       logout();
     }
+  });
+
+  // Cloud Sync Diagnostics
+  const syncStatusEl = document.getElementById('sync-status');
+  const syncErrorEl = document.getElementById('sync-error');
+  const forcePullBtn = document.getElementById('btn-force-pull');
+
+  const updateSyncUI = async () => {
+      const lastSync = storage.getItem('_last_sync_time');
+      if (syncStatusEl) {
+          syncStatusEl.textContent = lastSync ? `最終同期: ${new Date(parseInt(lastSync)).toLocaleString()}` : '未同期';
+      }
+  };
+
+  updateSyncUI();
+
+  forcePullBtn?.addEventListener('click', async () => {
+      if (forcePullBtn instanceof HTMLButtonElement) {
+          forcePullBtn.disabled = true;
+          const original = forcePullBtn.innerHTML;
+          forcePullBtn.innerHTML = `<span>同期中...</span>`;
+          
+          try {
+              const result = await (storage as any).pullAll();
+              if (result && result.error) throw result.error;
+              if (syncErrorEl) syncErrorEl.style.display = 'none';
+              storage.setItem('_last_sync_time', Date.now().toString());
+              updateSyncUI();
+              alert('同期が完了しました。');
+              window.location.reload(); // Refresh to ensure all data is active
+          } catch (e: any) {
+              if (syncErrorEl) {
+                  syncErrorEl.textContent = `同期エラー: ${e.message || '通信失敗'}`;
+                  syncErrorEl.style.display = 'block';
+              }
+          } finally {
+              forcePullBtn.innerHTML = original;
+              forcePullBtn.disabled = false;
+          }
+      }
   });
 }

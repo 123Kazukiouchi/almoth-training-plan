@@ -15,6 +15,9 @@ import { renderSubscription, initSubscription } from './pages/subscription';
 import { renderSettings, initSettings } from './pages/settings';
 import { renderGuide, initGuide } from './pages/guide';
 
+import { storage } from './utils/storage';
+import { supabase } from './utils/supabaseClient';
+
 // Register routes
 addRoute('/login', () => renderLogin());
 addRoute('/dashboard', () => renderDashboard());
@@ -73,14 +76,35 @@ window.addEventListener('route-changed', (e) => {
 // Start the router
 initRouter();
 
-// Register Service Worker for PWA
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').then(registration => {
-      console.log('SW registered: ', registration);
-    }).catch(registrationError => {
-      console.log('SW registration failed: ', registrationError);
-    });
-  });
-}
+// Initialize data sync from Supabase
+storage.pullAll();
+
+// Listen for auth changes and re-pull if necessary (e.g. after login)
+supabase.auth.onAuthStateChange(async (_event, session) => {
+  const SESSION_KEY = 'almoth_auth_session';
+  
+  if (session && session.user) {
+    // Update local session for getCachedUser()
+    const user = {
+      email: session.user.email || '',
+      id: session.user.id,
+      lastLogin: Date.now()
+    };
+    localStorage.setItem(SESSION_KEY, JSON.stringify(user));
+    
+    // Migrate data from guest to user account
+    await storage.migrateGuestToUser();
+    
+    // Then pull everything from cloud
+    await storage.pullAll();
+    storage.setItem('_last_sync_time', Date.now().toString());
+
+    // Force refresh if on dashboard to show latest synced data
+    if (window.location.hash === '#/dashboard' || window.location.hash === '') {
+        window.dispatchEvent(new CustomEvent('route-changed', { detail: { path: '/dashboard' } }));
+    }
+  } else {
+    localStorage.removeItem(SESSION_KEY);
+  }
+});
 

@@ -10,6 +10,7 @@ import { showActivityModal } from '../components/activityModal';
 import { Chart, registerables } from 'chart.js';
 import { storage } from '../utils/storage';
 import { getDailyAdvice, evaluateProgressionLevels, predictFutureFtp, predictLevelUp } from '../services/aiService';
+import { aggregateDailyTss, fillDailyGaps, calculateHistory } from '../utils/trainingLoad';
 
 Chart.register(...registerables);
 
@@ -41,6 +42,9 @@ export function renderDashboard(): string {
       </div>
 
       <div id="ai-ftp-prediction-banner" style="margin-bottom: 24px;"></div>
+
+      <!-- Training Cycle Section (New) -->
+      <div id="training-cycle-section" style="margin-bottom: 24px; display: none;"></div>
 
       <div class="metrics-grid" id="dashboard-metrics-grid">
         <div style="grid-column: 1 / -1; display: flex; justify-content: center; padding: 20px;">
@@ -109,30 +113,53 @@ function renderAthleteLevels(levels: any) {
 
     card.style.display = 'block';
     const ftp = storage.getItem('user_ftp') || '---';
-    if (ftpBtn) ftpBtn.textContent = `${ftp} FTPに基づく`;
+    const lastUpdate = levels.lastUpdate ? new Date(levels.lastUpdate).toLocaleString('ja-JP', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '未更新';
+    
+    if (ftpBtn) ftpBtn.innerHTML = `<div>${ftp} FTPに基づく</div><div style="font-size: 0.7rem; opacity: 0.8;">最終更新: ${lastUpdate}</div>`;
 
     const zones = [
-        { key: 'endurance', label: '持久力' },
-        { key: 'tempo', label: 'テンポ' },
-        { key: 'sweetSpot', label: 'スイートスポット' },
-        { key: 'threshold', label: 'スレッシュホルド' },
-        { key: 'vo2max', label: 'VO2マックス' },
-        { key: 'anaerobic', label: '無酸素' },
+        { key: 'endurance', label: '持久力', color: 'linear-gradient(90deg, #3B82F6, #2563EB)' },
+        { key: 'tempo', label: 'テンポ', color: 'linear-gradient(90deg, #10B981, #059669)' },
+        { key: 'sweetSpot', label: 'スイートスポット', color: 'linear-gradient(90deg, #F59E0B, #D97706)' },
+        { key: 'threshold', label: '閾値', color: 'linear-gradient(90deg, #EF4444, #DC2626)' },
+        { key: 'vo2max', label: 'VO2マックス', color: 'linear-gradient(90deg, #8B5CF6, #7C3AED)' },
+        { key: 'anaerobic', label: '無酸素', color: 'linear-gradient(90deg, #EC4899, #DB2777)' },
     ];
 
     container.innerHTML = zones.map(z => {
         const val = levels[z.key] || 1.0;
         const percent = Math.min(100, (val / 10) * 100);
         return `
-            <div style="display: grid; grid-template-columns: 120px 40px 1fr; align-items: center; gap: 12px;">
-                <span style="font-size: 0.9rem; font-weight: 500;">${z.label}</span>
-                <span style="font-size: 0.9rem; font-weight: 700; color: var(--color-primary);">${val.toFixed(1)}</span>
-                <div style="height: 12px; background: var(--color-bg); border-radius: 6px; overflow: hidden; position: relative;">
-                    <div style="height: 100%; width: ${percent}%; background: linear-gradient(90deg, #ef4444, #dc2626); border-radius: 6px; transition: width 1s ease-out;"></div>
+            <div style="display: grid; grid-template-columns: 100px 40px 1fr; align-items: center; gap: 12px; margin-bottom: 4px;">
+                <span style="font-size: 0.85rem; font-weight: 500; color: var(--color-text-secondary);">${z.label}</span>
+                <span style="font-size: 0.9rem; font-weight: 700; color: var(--color-text-primary);">${val.toFixed(1)}</span>
+                <div style="height: 10px; background: var(--color-bg); border-radius: 5px; overflow: hidden; position: relative; border: 1px solid var(--color-border-light);">
+                    <div style="height: 100%; width: ${percent}%; background: ${z.color}; border-radius: 5px; transition: width 1s ease-out;"></div>
                 </div>
             </div>
         `;
-    }).join('');
+    }).join('') + `
+        <div style="margin-top: 12px; border-top: 1px solid var(--color-border-light); padding-top: 12px;">
+            <button class="btn btn-outline btn-sm" id="btn-re-evaluate-levels" style="width: 100%; font-size: 0.75rem;">
+                ${icons.sync} AIレベルを再評価する
+            </button>
+        </div>
+    `;
+
+    document.getElementById('btn-re-evaluate-levels')?.addEventListener('click', async () => {
+        const btn = document.getElementById('btn-re-evaluate-levels') as HTMLButtonElement;
+        btn.disabled = true;
+        btn.innerHTML = `${icons.sync} 分析中...`;
+        
+        const activitiesData = JSON.parse(storage.getItem('latest_activities_cache') || '[]');
+        if (activitiesData.length > 0) {
+            const newLevels = await evaluateProgressionLevels(activitiesData);
+            renderAthleteLevels(newLevels);
+        } else {
+            btn.innerHTML = 'データ不足';
+            setTimeout(() => { btn.disabled = false; btn.innerHTML = `${icons.sync} AIレベルを再評価する`; }, 2000);
+        }
+    });
 }
 
 function renderFtpPrediction(p: { current: number, predicted: number, date: string, confidence: number }) {
@@ -173,6 +200,102 @@ function renderFtpPrediction(p: { current: number, predicted: number, date: stri
                     適用する
                 </button>
             </div>
+        </div>
+    `;
+}
+
+function renderTrainingCycle(activeGoal: any, nextWorkout: any) {
+    const container = document.getElementById('training-cycle-section');
+    if (!container) return;
+
+    if (!activeGoal && !nextWorkout) {
+        container.style.display = 'none';
+        return;
+    }
+
+    container.style.display = 'block';
+    
+    let goalHtml = '';
+    if (activeGoal) {
+        let icon = '🎯';
+        let color = 'var(--color-primary)';
+        switch (activeGoal.type) {
+            case 'race': icon = '🏔️'; color = '#3B82F6'; break;
+            case 'ftp': icon = '⚡'; color = '#F59E0B'; break;
+            case 'profile': icon = '🚴'; color = '#10B981'; break;
+            case 'weight': icon = '⚖️'; color = '#8B5CF6'; break;
+        }
+        goalHtml = `
+            <div class="card" style="flex: 1; border-left: 4px solid ${color}; padding: 16px;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
+                    <div style="font-size: 0.75rem; font-weight: 700; color: ${color}; text-transform: uppercase;">現在の目標</div>
+                    <button class="btn btn-outline btn-sm" style="padding: 2px 8px; font-size: 0.7rem;" onclick="window.location.hash='#/goals'">変更</button>
+                </div>
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <div style="font-size: 1.5rem;">${icon}</div>
+                    <div>
+                        <div style="font-weight: 700; font-size: 1rem;">${activeGoal.name}</div>
+                        <div style="font-size: 0.8rem; color: var(--color-text-muted);">${activeGoal.period}</div>
+                    </div>
+                </div>
+                <div style="margin-top: 12px;">
+                    <button class="btn btn-primary btn-sm" style="width: 100%;" onclick="window.location.hash='#/plans'">
+                        プランを確認・生成
+                    </button>
+                </div>
+            </div>
+        `;
+    } else {
+        goalHtml = `
+            <div class="card" style="flex: 1; padding: 16px; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; border: 1px dashed var(--color-border);">
+                <div style="font-size: 1.2rem; margin-bottom: 4px;">🎯</div>
+                <div style="font-size: 0.85rem; font-weight: 600; color: var(--color-text-muted);">目標が設定されていません</div>
+                <button class="btn btn-outline btn-sm" style="margin-top: 8px;" onclick="window.location.hash='#/goals'">目標を設定する</button>
+            </div>
+        `;
+    }
+
+    let workoutHtml = '';
+    if (nextWorkout) {
+        const date = new Date(nextWorkout.date);
+        const isToday = nextWorkout.date === new Date().toISOString().split('T')[0];
+        workoutHtml = `
+            <div class="card" style="flex: 1; border-left: 4px solid var(--color-secondary); padding: 16px;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
+                    <div style="font-size: 0.75rem; font-weight: 700; color: var(--color-secondary); text-transform: uppercase;">次回のトレーニング</div>
+                    <div style="font-size: 0.75rem; color: var(--color-text-muted);">${isToday ? '今日' : `${date.getMonth()+1}/${date.getDate()}`}</div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <div style="font-size: 1.5rem;">📅</div>
+                    <div style="min-width: 0;">
+                        <div style="font-weight: 700; font-size: 1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${nextWorkout.title}</div>
+                        <div style="font-size: 0.8rem; color: var(--color-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${nextWorkout.description}</div>
+                    </div>
+                </div>
+                <div style="margin-top: 12px; display: flex; gap: 8px;">
+                     <button class="btn btn-outline btn-sm" style="flex: 1;" onclick="window.location.hash='#/calendar'">
+                        カレンダー
+                    </button>
+                    <button class="btn btn-primary btn-sm" style="flex: 1;" onclick="window.location.hash='#/chat'">
+                        コツを聞く
+                    </button>
+                </div>
+            </div>
+        `;
+    } else {
+        workoutHtml = `
+            <div class="card" style="flex: 1; padding: 16px; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; border: 1px dashed var(--color-border);">
+                <div style="font-size: 1.2rem; margin-bottom: 4px;">📅</div>
+                <div style="font-size: 0.85rem; font-weight: 600; color: var(--color-text-muted);">予定がありません</div>
+                <button class="btn btn-outline btn-sm" style="margin-top: 8px;" onclick="window.location.hash='#/plans'">プランを適用する</button>
+            </div>
+        `;
+    }
+
+    container.innerHTML = `
+        <div style="display: flex; gap: 16px; flex-wrap: wrap;">
+            ${goalHtml}
+            ${workoutHtml}
         </div>
     `;
 }
@@ -226,17 +349,19 @@ function renderActivities(activities: IntervalsActivity[]) {
         const spdStr = act.average_speed ? `<span style="margin-left:8px;" title="Average Speed">💨${(act.average_speed * 3.6).toFixed(1)}km/h</span>` : '';
 
         return `
-        <div class="dashboard-activity-item" data-index="${idx}" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--color-border-light); cursor: pointer; transition: background 0.2s;" onmouseover="this.style.background='var(--color-bg)'" onmouseout="this.style.background='transparent'">
-            <div style="display: flex; align-items: center; gap: 12px; flex: 1;">
-                <div style="width: 40px; height: 40px; background: var(--color-primary-bg); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; color: var(--color-primary); flex-shrink: 0;">
-                    ${icon}
-                </div>
-                <div style="flex: 1; min-width: 0;">
-                    <div style="font-weight: 600; font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${act.name}</div>
-                    <div style="font-size: 0.8rem; color: var(--color-text-muted);">
-                        ${dateStr} 
-                        ${act.type === 'WeightTraining' ? '<span style="margin-left:8px;" title="Source">Hevy</span>' : ''}
-                        ${npStr}${hrStr}${elevStr}${spdStr}
+        <div class="dashboard-activity-item" data-index="${idx}">
+            <div class="dashboard-activity-info">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <div class="dashboard-activity-icon-wrap">
+                        ${icon}
+                    </div>
+                    <div style="min-width: 0;">
+                        <div class="dashboard-activity-item-title">${act.name}</div>
+                        <div class="dashboard-activity-item-meta">
+                            <span>${dateStr}</span>
+                            ${act.type === 'WeightTraining' ? '<span title="Source">Hevy</span>' : ''}
+                            ${npStr}${hrStr}${elevStr}${spdStr}
+                        </div>
                     </div>
                 </div>
             </div>
@@ -284,48 +409,15 @@ export async function initDashboard() {
             let mergedActivities: IntervalsActivity[] = [];
             let todaysWorkouts: any[] = [];
             let latestW: IntervalsWellness = {} as IntervalsWellness;
+            let latestMetrics = { ctl: 0, atl: 0, tsb: 0 };
 
             // If API not configured or failed, fallback to mock but continue analysis if possible
-            if (wellnessData.length === 0 && activitiesData.length === 0 && hevyData.length === 0) {
+            if (activitiesData.length === 0 && hevyData.length === 0) {
                 renderMetrics(metrics);
                 renderActivities([]);
                 renderChart(generateChartData());
-                // For mock path, mergedActivities stays empty or we could use mock if we had it
             } else {
-                // Extract latest metrics
-                latestW = wellnessData[wellnessData.length - 1] || {} as IntervalsWellness;
-                const weekAgoW = wellnessData[wellnessData.length - 8] || {} as IntervalsWellness;
-                
-                const ctl = latestW.ctl != null ? latestW.ctl : 0;
-                const atl = latestW.atl != null ? latestW.atl : 0;
-                const tsb = latestW.tsb != null ? latestW.tsb : (ctl - atl);
-
-                const prevCtl = weekAgoW.ctl != null ? weekAgoW.ctl : 0;
-                const prevAtl = weekAgoW.atl != null ? weekAgoW.atl : 0;
-                const prevTsb = weekAgoW.tsb != null ? weekAgoW.tsb : (prevCtl - prevAtl);
-
-                let weight = latestW.weight != null ? latestW.weight : parseFloat(storage.getItem('user_weight') || '0');
-                
-                let sleepStr = '-';
-                if (latestW.sleepSecs) {
-                    const hrs = Math.floor(latestW.sleepSecs / 3600);
-                    const mins = Math.floor((latestW.sleepSecs % 3600) / 60);
-                    sleepStr = `${hrs}h ${mins}m`;
-                }
-
-                const currentMetrics = [
-                    { label: 'Fitness', labelEn: 'Fitness', value: ctl > 0 ? Math.round(ctl) : 0, sub: `7日前: ${prevCtl > 0 ? Math.round(prevCtl) : '-'}`, iconColor: '#10B981' },
-                    { label: 'Fatigue', labelEn: 'Fatigue', value: atl > 0 ? Math.round(atl) : 0, sub: `7日前: ${prevAtl > 0 ? Math.round(prevAtl) : '-'}`, iconColor: '#3B82F6' },
-                    { label: 'Form', labelEn: 'Form', value: Math.round(tsb), sub: `7日前: ${Math.round(prevTsb)}`, iconColor: '#A855F7' },
-                    { label: '安静時心拍', labelEn: 'Resting HR', value: latestW.restingHR != null ? latestW.restingHR : '-', sub: 'bpm', iconColor: '#EC4899' },
-                    { label: 'HRV', labelEn: 'rMSSD', value: latestW.hrv ? Math.round(latestW.hrv) : '-', sub: latestW.hrvScore ? `スコア: ${latestW.hrvScore}` : 'ms', iconColor: '#8B5CF6' },
-                    { label: '睡眠', labelEn: 'Sleep', value: sleepStr, sub: latestW.sleepScore ? `スコア: ${latestW.sleepScore}` : '', iconColor: '#6366F1' },
-                    { label: 'FTP', labelEn: 'FTP', value: storage.getItem('user_ftp') || '-', sub: 'Watts', iconColor: '#F97316' },
-                    { label: '体重', labelEn: 'Weight', value: weight > 0 ? weight : '-', sub: `体脂肪: ${latestW.bodyFat ? latestW.bodyFat + '%' : '-'}`, iconColor: '#F43F5E' }
-                ];
-
-                renderMetrics(currentMetrics);
-
+                // 1. Process Activities (Deduplication is already in fetchActivities)
                 const formattedHevy = hevyData.map(hw => {
                     const start = new Date(hw.start_time);
                     const end = new Date(hw.end_time);
@@ -338,32 +430,78 @@ export async function initDashboard() {
                     } as any as IntervalsActivity;
                 });
                 mergedActivities = [...activitiesData, ...formattedHevy].sort((a,b) => new Date(b.start_date_local).getTime() - new Date(a.start_date_local).getTime());
+                storage.setItem('latest_activities_cache', JSON.stringify(mergedActivities));
                 renderActivities(mergedActivities);
 
-                const labels: string[] = [];
-                const fitness: number[] = [];
-                const fatigue: number[] = [];
-                const form: number[] = [];
-                const hr: (number | null)[] = [];
-                const ftp: number[] = [];
+                // 2. Calculate Custom Training Load (Fix for duplication)
+                const dailyLoads = aggregateDailyTss(mergedActivities);
+                const completeDailyLoads = fillDailyGaps(dailyLoads);
+                const loadHistory = calculateHistory(completeDailyLoads);
 
-                for (const w of wellnessData) {
-                    const d = new Date(w.date);
-                    labels.push(`${d.getMonth()+1}/${d.getDate()}`);
-                    const dayCtl = w.ctl != null ? w.ctl : 0;
-                    const dayAtl = w.atl != null ? w.atl : 0;
-                    const dayTsb = w.tsb != null ? w.tsb : (dayCtl - dayAtl);
-                    fitness.push(dayCtl);
-                    fatigue.push(dayAtl);
-                    form.push(dayTsb);
-                    hr.push(w.restingHR || null);
-                    
-                    // FTP History: check localStorage history or just current if same day
-                    // In real Intervals API, wellness can have 'ftp' field if it changed
-                    // For now, let's use the current FTP as fallback but look for history
-                    ftp.push(w.ftp || parseInt(storage.getItem('user_ftp') || '0'));
+                // 3. Extract Latest and Trend values
+                const todayStr = now.toISOString().split('T')[0];
+                const weekAgo = new Date(now.getTime() - (7 * 24 * 60 * 60 * 1000));
+                const weekAgoStr = weekAgo.toISOString().split('T')[0];
+
+                latestMetrics = loadHistory.get(todayStr) || { ctl: 0, atl: 0, tsb: 0 };
+                // Find closest historical value for '7 days ago'
+                const pastDates = Array.from(loadHistory.keys()).sort();
+                const weekAgoActualStr = pastDates.find(d => d >= weekAgoStr) || pastDates[0];
+                const weekAgoMetrics = loadHistory.get(weekAgoActualStr) || { ctl: 0, atl: 0, tsb: 0 };
+
+                latestW = wellnessData[wellnessData.length - 1] || {} as IntervalsWellness;
+                let weight = latestW.weight != null ? latestW.weight : parseFloat(storage.getItem('user_weight') || '0');
+                
+                let sleepStr = '-';
+                if (latestW.sleepSecs) {
+                    const hrs = Math.floor(latestW.sleepSecs / 3600);
+                    const mins = Math.floor((latestW.sleepSecs % 3600) / 60);
+                    sleepStr = `${hrs}h ${mins}m`;
                 }
-                renderChart({ labels, fitness, fatigue, form, hr, ftp });
+
+                const currentMetrics = [
+                    { label: 'Fitness', labelEn: 'Fitness', value: Math.round(latestMetrics.ctl), sub: `7日前: ${Math.round(weekAgoMetrics.ctl)}`, iconColor: '#10B981' },
+                    { label: 'Fatigue', labelEn: 'Fatigue', value: Math.round(latestMetrics.atl), sub: `7日前: ${Math.round(weekAgoMetrics.atl)}`, iconColor: '#3B82F6' },
+                    { label: 'Form', labelEn: 'Form', value: Math.round(latestMetrics.tsb), sub: `7日前: ${Math.round(weekAgoMetrics.tsb)}`, iconColor: '#A855F7' },
+                    { label: '安静時心拍', labelEn: 'Resting HR', value: latestW.restingHR != null ? latestW.restingHR : '-', sub: 'bpm', iconColor: '#EC4899' },
+                    { label: 'HRV', labelEn: 'rMSSD', value: latestW.hrv ? Math.round(latestW.hrv) : '-', sub: latestW.hrvScore ? `スコア: ${latestW.hrvScore}` : 'ms', iconColor: '#8B5CF6' },
+                    { label: '睡眠', labelEn: 'Sleep', value: sleepStr, sub: latestW.sleepScore ? `スコア: ${latestW.sleepScore}` : '', iconColor: '#6366F1' },
+                    { label: 'FTP', labelEn: 'FTP', value: storage.getItem('user_ftp') || '-', sub: 'Watts', iconColor: '#F97316' },
+                    { label: '体重', labelEn: 'Weight', value: weight > 0 ? weight : '-', sub: `体脂肪: ${latestW.bodyFat ? latestW.bodyFat + '%' : '-'}`, iconColor: '#F43F5E' }
+                ];
+                renderMetrics(currentMetrics);
+
+                // 4. Prepare Chart Data from calculation results
+                const chartLabels: string[] = [];
+                const chartFitness: number[] = [];
+                const chartFatigue: number[] = [];
+                const chartForm: number[] = [];
+                const chartHr: (number | null)[] = [];
+                const chartFtp: number[] = [];
+
+                // Use the dates from completeDailyLoads to ensure continuous chart
+                completeDailyLoads.forEach(l => {
+                    const d = new Date(l.date);
+                    chartLabels.push(`${d.getMonth()+1}/${d.getDate()}`);
+                    const m = loadHistory.get(l.date)!;
+                    chartFitness.push(m.ctl);
+                    chartFatigue.push(m.atl);
+                    chartForm.push(m.tsb);
+                    
+                    // Match with wellness data if possible for HR/FTP
+                    const w = wellnessData.find(wd => wd.date.startsWith(l.date));
+                    chartHr.push(w?.restingHR || null);
+                    chartFtp.push(w?.ftp || parseInt(storage.getItem('user_ftp') || '0'));
+                });
+
+                renderChart({ 
+                    labels: chartLabels, 
+                    fitness: chartFitness, 
+                    fatigue: chartFatigue, 
+                    form: chartForm, 
+                    hr: chartHr, 
+                    ftp: chartFtp 
+                });
             }
 
             // ... inside loadDashboardData, where renderFtpPrediction is called:
@@ -388,6 +526,17 @@ export async function initDashboard() {
             const todayStr = new Date().toISOString().split('T')[0];
             const allScheduled = JSON.parse(storage.getItem('scheduled_workouts') || '[]');
             todaysWorkouts = allScheduled.filter((w: any) => w.date === todayStr);
+
+            // Fetch Active Goal and Next Workout for Training Cycle
+            const savedGoals = JSON.parse(storage.getItem('user_goals') || '[]');
+            const activeGoalId = storage.getItem('active_goal_id');
+            const activeGoal = savedGoals.find((g: any) => g.id === activeGoalId);
+            
+            const nextWorkout = allScheduled
+                .filter((w: any) => w.date >= todayStr)
+                .sort((a: any, b: any) => a.date.localeCompare(b.date))[0];
+
+            renderTrainingCycle(activeGoal, nextWorkout);
             
             const adviceSection = document.getElementById('today-advice-section');
             const workoutsContainer = document.getElementById('today-workouts');
@@ -432,7 +581,8 @@ export async function initDashboard() {
                     adviceContent.innerHTML = '<div style="text-align:center;color:var(--color-text-muted);">最近のトレーニング負荷とウェルネスデータを分析しています...</div>';
                     
                     try {
-                        const advice = await getDailyAdvice(latestW, todaysWorkouts, mergedActivities);
+                        const mergedForAdvice = { ...latestW, ...latestMetrics };
+                        const advice = await getDailyAdvice(mergedForAdvice, todaysWorkouts, mergedActivities);
                         adviceContent.innerHTML = advice.replace(/\n/g, '<br>').replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
                     } catch (e: any) {
                         adviceContent.innerHTML = `<span style="color:var(--color-danger);">エラーが発生しました: ${e.message}</span>`;

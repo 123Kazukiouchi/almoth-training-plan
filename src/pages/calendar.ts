@@ -5,6 +5,7 @@ import { icons } from '../components/icons';
 import { fetchActivities, fetchWellness } from '../services/intervalsSync';
 import type { IntervalsWellness } from '../services/intervalsSync';
 import { fetchHevyWorkouts } from '../services/hevySync';
+import { storage } from '../utils/storage';
 import { showActivityModal, showHevyModal, showScheduledWorkoutModal } from '../components/activityModal';
 
 const zoneColors: Record<string, string> = {
@@ -210,7 +211,7 @@ export function initCalendar() {
                 fetchHevyWorkouts()
             ]);
 
-            const scheduledWorkouts = JSON.parse(localStorage.getItem('scheduled_workouts') || '[]');
+            const scheduledWorkouts = JSON.parse(storage.getItem('scheduled_workouts') || '[]');
 
             // Build a date-indexed wellness map
             // Intervals.icu API: wellness entries use `id` as the date string (e.g. "2026-03-10")
@@ -275,7 +276,8 @@ export function initCalendar() {
                             </div>
                             <div class="calendar-activity-detail" title="${hw.title}">
                               <span style="font-size: 0.65rem; background: var(--color-success); color: white; padding: 2px 4px; border-radius: 4px; margin-right: 4px; vertical-align: middle;">完了</span>
-                              🏋️ ${duration} (Hevy) ${matchingTss ? Math.round(matchingTss) + ' TSS' : ''}
+                              <span style="display:inline-block; width:14px; height:14px; vertical-align:middle; margin-right:2px; color:var(--color-primary);">${icons.weight}</span>
+                              ${duration} (Hevy) ${matchingTss ? Math.round(matchingTss) + ' TSS' : ''}
                             </div>
                           </div>
                         `;
@@ -303,8 +305,16 @@ export function initCalendar() {
                               <div class="zone" style="width:100%; background:${isRide ? zoneColors['z2'] : zoneColors['z3']};"></div>
                             </div>
                             <div class="calendar-activity-detail" title="${act.name}">
-                              <span style="font-size: 0.65rem; background: var(--color-success); color: white; padding: 2px 4px; border-radius: 4px; margin-right: 4px; vertical-align: middle;">完了</span>
-                              ${act.type === 'Run' ? '🏃' : isRide ? '🚴' : '💪'} ${duration} ${tssVal ? Math.round(tssVal) + ' TSS' : ''}${npStr}${hrStr}
+                               <span style="font-size: 0.65rem; background: var(--color-success); color: white; padding: 2px 4px; border-radius: 4px; margin-right: 4px; vertical-align: middle;">完了</span>
+                               <span style="display:inline-block; width:14px; height:14px; vertical-align:middle; margin-right:2px; color:var(--color-primary);">
+                                 ${(() => {
+                                    if (act.type === 'Run') return icons.run;
+                                    if (act.type === 'VirtualRide' || act.type === 'IndoorCycle' || act.name.includes('屋内')) return icons.indoorBike;
+                                    if (isRide) return icons.bike;
+                                    return icons.weight;
+                                 })()}
+                               </span>
+                               ${duration} ${tssVal ? Math.round(tssVal) + ' TSS' : ''}${npStr}${hrStr}
                             </div>
                           </div>
                         `;
@@ -331,8 +341,9 @@ export function initCalendar() {
                             transition: transform 0.1s;
                           " title="予定: ${sw.description}" onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform='scale(1)'">
                             <div class="calendar-activity-detail" style="color: var(--color-primary);">
-                              <span style="font-size: 0.65rem; background: var(--color-primary); color: white; padding: 2px 4px; border-radius: 4px; margin-right: 4px; vertical-align: middle;">予定</span>
-                              📝 ${sw.title}
+                               <span style="font-size: 0.65rem; background: var(--color-primary); color: white; padding: 2px 4px; border-radius: 4px; margin-right: 4px; vertical-align: middle;">予定</span>
+                               <span style="display:inline-block; width:14px; height:14px; vertical-align:middle; margin-right:2px; color:var(--color-primary);">${icons.calendar}</span>
+                               ${sw.title}
                             </div>
                           </div>
                         `;

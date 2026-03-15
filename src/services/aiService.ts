@@ -1,6 +1,7 @@
 import { fetchWellness, fetchActivities, fetchActivityDetails } from './intervalsSync';
 import { fetchHevyWorkouts } from './hevySync';
 import { storage } from '../utils/storage';
+import { aggregateDailyTss, fillDailyGaps, calculateHistory } from '../utils/trainingLoad';
 
 
 // Dynamic URL generation will be done inside the request
@@ -42,6 +43,22 @@ async function buildUserContext(): Promise<string> {
 - FTP: ${ftp} W
 - 体重: ${weight} kg
 - 最大心拍数: ${maxHr} bpm
+
+【現在の目標設定】
+${(() => {
+    const savedGoals = JSON.parse(storage.getItem('user_goals') || '[]');
+    const activeGoalId = storage.getItem('active_goal_id');
+    const activeGoal = savedGoals.find((g: any) => g.id === activeGoalId);
+    if (!activeGoal) return "- 現在、アクティブな目標はありません。";
+    return `- 目標名: ${activeGoal.name}\n- タイプ: ${activeGoal.type}\n- 期間: ${activeGoal.period}\n- 目標値: ${activeGoal.target || '未設定'}\n- メモ: ${activeGoal.memo || 'なし'}`;
+})()}
+
+【保存されているトレーニングプラン】
+${(() => {
+    const savedPlans = JSON.parse(storage.getItem('saved_plans') || '[]');
+    if (savedPlans.length === 0) return "- 保存されたプランはありません。";
+    return savedPlans.map((p: any) => `- ${p.title} (生成日: ${p.date})`).join('\n');
+})()}
 `;
 
     if (!athleteId || !intervalsKey) {
@@ -62,14 +79,34 @@ async function buildUserContext(): Promise<string> {
             fetchHevyWorkouts()
         ]);
 
-        if (wellnessData.length > 0) {
-            const latestW = wellnessData[wellnessData.length - 1];
-            contextData += `\n【最新のコンディション (Intervals)】\n`;
-            // CTL/ATL/TSB
-            contextData += `- Fitness (CTL): ${latestW.ctl !== undefined ? Math.round(latestW.ctl) : '未計測'}\n`;
-            contextData += `- Fatigue (ATL): ${latestW.atl !== undefined ? Math.round(latestW.atl) : '未計測'}\n`;
-            contextData += `- Form (TSB): ${latestW.tsb !== undefined ? Math.round(latestW.tsb) : '未計測'}\n`;
-            // HR / HRV
+        if (activitiesData.length > 0 || (hevyData && hevyData.length > 0)) {
+            // 合併とソート
+            const formattedHevy = (hevyData || []).map(hw => {
+                const start = new Date(hw.start_time);
+                const end = new Date(hw.end_time);
+                const movingTime = Math.round((end.getTime() - start.getTime()) / 1000);
+                return {
+                    id: hw.id, start_date_local: hw.start_time, type: 'WeightTraining', name: hw.title, distance: 0,
+                    moving_time: movingTime, elapsed_time: movingTime, icu_training_load: 0, tss: 0, normalized_watts: 0,
+                    average_watts: 0, device_name: 'Hevy', source: 'Hevy'
+                } as any;
+            });
+            const mergedActivities = [...activitiesData, ...formattedHevy].sort((a,b) => new Date(b.start_date_local).getTime() - new Date(a.start_date_local).getTime());
+
+            // 独自計算
+            const dailyLoads = aggregateDailyTss(mergedActivities);
+            const completeDailyLoads = fillDailyGaps(dailyLoads);
+            const loadHistory = calculateHistory(completeDailyLoads);
+            const todayStr = now.toISOString().split('T')[0];
+            const accMetrics = loadHistory.get(todayStr) || { ctl: 0, atl: 0, tsb: 0 };
+
+            contextData += `\n【最新のコンディション (正確な独自計算値)】\n`;
+            contextData += `- Fitness (CTL): ${accMetrics.ctl} (42日平均負荷)\n`;
+            contextData += `- Fatigue (ATL): ${accMetrics.atl} (7日平均負荷)\n`;
+            contextData += `- Form (TSB): ${accMetrics.tsb} (疲労と体力のバランス)\n`;
+
+            const latestW = wellnessData[wellnessData.length - 1] || {};
+            contextData += `\n【その他の生体データ (最新)】\n`;
             if (latestW.restingHR) contextData += `- 安静時心拍数: ${latestW.restingHR} bpm\n`;
             if (latestW.wakingHR) contextData += `- 起床時心拍数: ${latestW.wakingHR} bpm\n`;
             if (latestW.hrv) contextData += `- HRV (rMSSD): ${latestW.hrv}\n`;
@@ -288,10 +325,11 @@ export async function getDailyAdvice(wellness: any, workouts: any[], recentActiv
 
     let wellnessStr = '(データなし)';
     if (wellness && Object.keys(wellness).length > 0) {
+        // もしCTLなどがwellnessの中に不鮮明な場合は、直近のアクティビティから計算された値を優先するようにプロンプトを構成
         wellnessStr = `
-- Fitness (CTL): ${wellness.ctl ? Math.round(wellness.ctl) : '-'}
-- Fatigue (ATL): ${wellness.atl ? Math.round(wellness.atl) : '-'}
-- Form (TSB): ${wellness.tsb ? Math.round(wellness.tsb) : '-'}
+- Fitness (CTL): ${wellness.ctl != null ? Math.round(wellness.ctl) : '-'} (独自計算による正確な値)
+- Fatigue (ATL): ${wellness.atl != null ? Math.round(wellness.atl) : '-'} (独自計算による正確な値)
+- Form (TSB): ${wellness.tsb != null ? Math.round(wellness.tsb) : '-'} (独自計算による正確な値)
 - 安静時心拍数: ${wellness.restingHR || '-'} bpm
 - HRV: ${wellness.hrv ? Math.round(wellness.hrv) : '-'}
 - 睡眠時間: ${wellness.sleepSecs ? Math.floor(wellness.sleepSecs/3600) + 'h ' + Math.floor((wellness.sleepSecs%3600)/60) + 'm' : '-'}
@@ -458,20 +496,40 @@ export async function evaluateProgressionLevels(activities: any[]): Promise<Prog
 
     const currentLevels = JSON.parse(storage.getItem('athlete_levels') || JSON.stringify(DEFAULT_LEVELS));
 
-    const prompt = `
-あなたはプロのサイクリング・データアナリストです。ユーザーの長期間（最大90日間）のアクティビティデータに基づき、アスリートの「プログレッションレベル (1.0〜10.0)」を精密に再評価してください。
+    const historySummary = history.slice(0, 45).map(a => {
+        const date = a.start_date_local.split('T')[0];
+        const tss = a.icu_training_load || a.tss || 0;
+        const if_val = (a.icu_intensity || 0) / 100 || '不明';
+        const np = a.normalized_watts ? `${Math.round(a.normalized_watts)}W` : '不明';
+        const hr = a.average_heartrate ? `HR:${Math.round(a.average_heartrate)}` : '';
+        const zones = a.icu_zone_times ? `Zones(Z1-Z7秒): ${JSON.stringify(a.icu_zone_times)}` : '詳細ゾーンデータなし';
+        return `- ${date}: ${a.name}, TSS=${tss}, IF=${if_val}, NP=${np}, ${hr}, ${zones}`;
+    }).join('\n');
 
-【現在のレベル（暫定）】
+    const prompt = `
+あなたは世界的に著名なロードサイクリングのデータアナリスト兼コーチです。
+ユーザーから提供された過去90日間のアクティビティデータ（TSS, IF, NP, 心拍数, ゾーン滞在時間等）を詳細にクロス分析し、アスリートの「プログレッションレベル (1.0〜10.0)」を評価・更新してください。
+
+【現在のアスリートレベル（暫定数値）】
 ${JSON.stringify(currentLevels)}
 
-【過去90分のアクティビティ概略（主要なもの ${history.length}件）】
-${history.slice(0, 30).map(a => `- ${a.start_date_local.split('T')[0]}: ${a.name}, TSS=${a.icu_training_load || a.tss || 0}, IF=${(a.icu_intensity || 0)/100 || '不明'}`).join('\n')}
+【過去90日間のアクティビティ履歴（主要な45件）】
+${historySummary}
 
-分析指示:
-1. 過去90日間のトレーニング頻度、強度、分布を詳しく見てください。
-2. 平均的なTSSやIFから、そのアスリートの真のベースラインを判定してください。
-3. ゾーン(Endurance, Tempo, SweetSpot, Threshold, VO2Max, Anaerobic)ごとに、そのレベルを 1.0〜10.0 で評価し直してください。
-4. **JSON形式のみで回答してください**。余計なテキストは不要です。
+分析のガイドライン:
+1. **VO2Max (1.0-10.0)**:
+   - 最も重視するのは Z5 (第5要素) での継続的な滞在時間です。
+   - IFが 0.95 以上のアクティビティや、名前に「VO2Max」「Interval」「ヒルクライム」が含まれる高強度ワークアウトをチェックしてください。
+   - 最近（直近2週間）でこれらがない場合、レベルは維持、あるいは 0.1 単位で漸減させてください。
+2. **Threshold (1.0-10.0)**:
+   - Z4での滞在時間、および IF 0.85〜0.95 のアクティビティを重視してください。
+3. **Endurance (1.0-10.0)**:
+   - Z2での長時間の滞在（2時間以上等）がある場合に向上させます。
+4. **全体整合性**: 
+   - レベルが急激に（例：1日で +2.0 など）上昇することは稀です。通常は +0.1〜0.5 程度の変化が現実的です。
+   - データが極端に少ない、または低強度のみの場合は 1.0 に近づけてください。
+
+【最重要】回答は必ず以下のJSON形式のみで行ってください。
 JSON構造: {"endurance": FLOAT, "tempo": FLOAT, "sweetSpot": FLOAT, "threshold": FLOAT, "vo2max": FLOAT, "anaerobic": FLOAT}
 `;
 
@@ -481,7 +539,7 @@ JSON構造: {"endurance": FLOAT, "tempo": FLOAT, "sweetSpot": FLOAT, "threshold"
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 contents: [{ role: 'user', parts: [{ text: prompt }] }],
-                generationConfig: { temperature: 0.2, response_mime_type: "application/json" }
+                generationConfig: { temperature: 0.4, response_mime_type: "application/json" }
             })
         });
 

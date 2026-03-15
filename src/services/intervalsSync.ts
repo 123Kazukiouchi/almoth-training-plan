@@ -286,17 +286,29 @@ export async function fetchActivities(oldest: string, newest: string): Promise<I
                 const timeDiffMinutes = Math.abs(actTime - exTime) / (1000 * 60);
                 const durationDiffMinutes = Math.abs(actDuration - exDuration) / 60;
                 
-                // 開始時刻が前後15分以内かつ、継続時間が前後15分以内を重複とみなす
-                return timeDiffMinutes <= 15 && durationDiffMinutes <= 15;
+                // 開始時刻が前後15分以内かつ、継続時間が前後15分以内を基本重複とみなす
+                const isTimeMatch = timeDiffMinutes <= 15 && durationDiffMinutes <= 15;
+
+                // Ride と VirtualRide は同じセッションの可能性が高い
+                const isTypeMatch = (act.type === existing.type) || 
+                                   (act.type.includes('Ride') && existing.type.includes('Ride'));
+                
+                return isTimeMatch && isTypeMatch;
             });
             
             if (duplicateIndex !== -1) {
-                // 重複がある場合、TSSが高い方を優先する
                 const existing = deduplicated[duplicateIndex];
+                // 情報量（TSS）が多い方を優先、またはStrava/Garminなど信頼できるソースを優先
                 const existingLoad = existing.icu_training_load || existing.tss || 0;
                 const newLoad = act.icu_training_load || act.tss || 0;
                 
-                if (newLoad > existingLoad) {
+                // TSSが高い方を残すのが一般的だが、Intervals側で計算済みの icu_training_load がある方を優先
+                const existingHasIcuLoad = existing.icu_training_load != null;
+                const newHasIcuLoad = act.icu_training_load != null;
+
+                if (newHasIcuLoad && !existingHasIcuLoad) {
+                    deduplicated[duplicateIndex] = act;
+                } else if (newLoad > existingLoad) {
                     deduplicated[duplicateIndex] = act;
                 }
             } else {

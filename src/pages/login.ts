@@ -1,23 +1,19 @@
 import { icons } from '../components/icons';
-import { login, getProfiles } from '../services/authService';
-// import type { UserProfile } from '../services/authService'; 
-
+import { loginWithEmail, signInWithGoogle, getCachedUser } from '../services/authService';
 
 export function renderLogin(): string {
-    const profiles = getProfiles();
+    const user = getCachedUser();
     
-    const profileHtml = profiles.length > 0 ? `
+    const profileHtml = user ? `
         <div class="login-profiles" style="margin-bottom: 24px;">
-            <p class="login-subtitle" style="font-size: 0.8rem; margin-bottom: 12px;">最近のログイン</p>
+            <p class="login-subtitle" style="font-size: 0.8rem; margin-bottom: 12px;">最後に利用したアカウント</p>
             <div style="display: flex; flex-direction: column; gap: 8px;">
-                ${profiles.map(p => `
-                    <button class="profile-btn" data-email="${p.email}" style="display: flex; align-items: center; gap: 12px; padding: 10px; background: var(--color-bg-alt); border: 1px solid var(--color-border); border-radius: var(--radius-md); text-align: left; cursor: pointer; transition: all 0.2s;">
-                        <div style="width: 32px; height: 32px; border-radius: 50%; background: var(--color-primary); color: white; display: flex; align-items: center; justify-content: center; font-weight: 700;">
-                            ${p.email[0].toUpperCase()}
-                        </div>
-                        <span style="font-size: 0.9rem;">${p.email}</span>
-                    </button>
-                `).join('')}
+                <button class="profile-btn" data-email="${user.email}" style="display: flex; align-items: center; gap: 12px; padding: 10px; background: var(--color-bg-alt); border: 1px solid var(--color-border); border-radius: var(--radius-md); text-align: left; cursor: pointer; transition: all 0.2s;">
+                    <div style="width: 32px; height: 32px; border-radius: 50%; background: var(--color-primary); color: white; display: flex; align-items: center; justify-content: center; font-weight: 700;">
+                        ${user.email[0].toUpperCase()}
+                    </div>
+                    <span style="font-size: 0.9rem;">${user.email}</span>
+                </button>
             </div>
             <div class="login-divider" style="margin: 24px 0;">または</div>
         </div>
@@ -34,6 +30,8 @@ export function renderLogin(): string {
           <p class="login-subtitle">Almoth TrainingPlan にサインイン</p>
         </div>
         
+        <div id="login-feedback" style="display: none; margin-bottom: 16px; padding: 12px; border-radius: var(--radius-md); font-size: 0.85rem; line-height: 1.5;"></div>
+
         ${profileHtml}
 
         <form class="login-form" id="login-form">
@@ -42,14 +40,10 @@ export function renderLogin(): string {
             <input class="form-input" type="email" id="email" placeholder="your@email.com" required />
           </div>
           
-          <div class="form-group">
-            <div class="form-label-row">
-              <label class="form-label" for="password">パスワード</label>
-            </div>
-            <input class="form-input" type="password" id="password" placeholder="パスワードを入力" />
-          </div>
-          
-          <button type="submit" class="login-btn" id="login-btn" style="width: 100%;">ログイン</button>
+          <button type="submit" class="login-btn" id="login-btn" style="width: 100%; margin-top: 12px;">ログインリンクを送信</button>
+          <p style="font-size: 0.70rem; color: var(--color-text-muted); text-align: center; margin-top: 12px;">
+            パスワードは不要です。メールに届くログインリンクをクリックしてください。
+          </p>
         </form>
         
         <div class="login-divider" style="margin-top: 24px;">または</div>
@@ -65,28 +59,55 @@ export function renderLogin(): string {
 
 export function initLogin() {
     const form = document.getElementById('login-form') as HTMLFormElement;
-    form?.addEventListener('submit', (e) => {
+    const feedback = document.getElementById('login-feedback');
+    const loginBtn = document.getElementById('login-btn') as HTMLButtonElement;
+
+    form?.addEventListener('submit', async (e) => {
         e.preventDefault();
         const email = (document.getElementById('email') as HTMLInputElement).value;
-        if (email) {
-            login(email);
-            window.location.hash = '/dashboard';
+        if (email && feedback && loginBtn) {
+            loginBtn.disabled = true;
+            loginBtn.innerText = '送信中...';
+            
+            const { error } = await loginWithEmail(email);
+            
+            if (error) {
+                feedback.style.display = 'block';
+                feedback.style.background = 'var(--color-danger-bg)';
+                feedback.style.color = 'var(--color-danger)';
+                feedback.innerText = 'エラーが発生しました: ' + error.message;
+                loginBtn.disabled = false;
+                loginBtn.innerText = 'ログインリンクを送信';
+            } else {
+                feedback.style.display = 'block';
+                feedback.style.background = 'var(--color-success-bg)';
+                feedback.style.color = 'var(--color-success)';
+                feedback.innerText = '確認メールを送信しました。メール内のリンクをクリックしてログインしてください。';
+                form.style.display = 'none';
+            }
         }
     });
 
     document.querySelectorAll('.profile-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
+        btn.addEventListener('click', async () => {
             const email = (btn as HTMLElement).dataset.email;
             if (email) {
-                login(email);
-                window.location.hash = '/dashboard';
+                const { error } = await loginWithEmail(email);
+                if (!error) {
+                    if (feedback) {
+                        feedback.style.display = 'block';
+                        feedback.style.background = 'var(--color-success-bg)';
+                        feedback.style.color = 'var(--color-success)';
+                        feedback.innerText = '確認メールを送信しました。件名をご確認ください。';
+                    }
+                }
             }
         });
     });
 
     const googleBtn = document.getElementById('google-login-btn');
-    googleBtn?.addEventListener('click', () => {
-        login('google-user@example.com');
-        window.location.hash = '/dashboard';
+    googleBtn?.addEventListener('click', async () => {
+        const { error } = await signInWithGoogle();
+        if (error) alert('Googleログインエラー: ' + error.message);
     });
 }

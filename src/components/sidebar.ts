@@ -19,7 +19,7 @@ const mainNavItems: NavItem[] = [
     { id: 'subscription', label: 'サブスクリプション', icon: icons.subscription, path: '/subscription' },
 ];
 
-import { getCurrentUser, logout } from '../services/authService';
+import { getCachedUser, logout } from '../services/authService';
 
 const bottomNavItems: NavItem[] = [
     { id: 'guide', label: '導入ガイド', icon: icons.guide, path: '/guide' },
@@ -62,8 +62,9 @@ export function renderSidebar(): string {
 }
 
 export function renderTopBar(): string {
-    const user = getCurrentUser();
-    const initial = user?.email[0].toUpperCase() || '?';
+    const user = getCachedUser();
+    const email = user?.email || '';
+    const initial = email ? email[0].toUpperCase() : '?';
     
     return `
     <div class="top-bar">
@@ -71,7 +72,7 @@ export function renderTopBar(): string {
         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
       </button>
       <div class="user-info-bar" style="display: flex; align-items: center; gap: 12px;">
-        <span style="font-size: 0.8rem; color: var(--color-text-muted); display: none; md:inline;">${user?.email}</span>
+        <span style="font-size: 0.8rem; color: var(--color-text-muted); display: none; md:inline;">${email}</span>
         <div class="user-avatar" id="user-avatar" style="cursor: pointer; background: var(--color-primary); color: white;">${initial}</div>
       </div>
     </div>

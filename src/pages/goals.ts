@@ -2,6 +2,7 @@
 
 import { renderSidebar, renderTopBar } from '../components/sidebar';
 import { icons } from '../components/icons';
+import { storage } from '../utils/storage';
 
 // -------------------------------------------------------------------
 // エビデンスに基づくトレーニング期間の定義
@@ -91,6 +92,13 @@ export function renderGoals(): string {
           </button>
         </div>
       </div>
+
+      <div id="active-goal-section" style="margin-top: 24px; display: none;">
+        <h2 style="font-size: 1rem; font-weight: 700; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+          <span style="color: var(--color-primary);">${icons.zap}</span> 現在取り組んでいる目標
+        </h2>
+        <div id="active-goal-card-container"></div>
+      </div>
       
       <div class="modal-overlay" id="goal-modal" style="display:none;">
         <div class="modal" style="max-width: 560px; width: 95%;">
@@ -178,11 +186,102 @@ export function renderGoals(): string {
 }
 
 export function initGoals() {
+  const container = document.getElementById('goals-container');
+  const activeSection = document.getElementById('active-goal-section');
+  const activeContainer = document.getElementById('active-goal-card-container');
+
+  const renderGoalsList = () => {
+    if (!container || !activeSection || !activeContainer) return;
+    
+    const savedGoals = JSON.parse(storage.getItem('user_goals') || '[]');
+    const activeGoalId = storage.getItem('active_goal_id');
+
+    if (savedGoals.length === 0) {
+      container.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-state-icon">${icons.goals}</div>
+          <div class="empty-state-title">まだ目標がありません</div>
+          <p class="empty-state-desc">レース目標を設定すると、AIがより精度の高いトレーニングプランを生成します。</p>
+          <button class="btn btn-primary" id="btn-first-goal-inner">
+            ${icons.plus}
+            <span>最初の目標を設定</span>
+          </button>
+        </div>
+      `;
+      activeSection.style.display = 'none';
+      document.getElementById('btn-first-goal-inner')?.addEventListener('click', showModal);
+      return;
+    }
+
+    // Render Active Goal
+    const activeGoal = savedGoals.find((g: any) => g.id === activeGoalId);
+    if (activeGoal) {
+      activeSection.style.display = 'block';
+      activeContainer.innerHTML = renderGoalCardHtml(activeGoal, true);
+    } else {
+      activeSection.style.display = 'none';
+    }
+
+    // Render All Goals
+    container.innerHTML = savedGoals.map((g: any) => renderGoalCardHtml(g, g.id === activeGoalId)).join('');
+
+    // Attach listeners
+    document.querySelectorAll('.btn-set-active').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const id = (e.currentTarget as HTMLElement).dataset.id;
+        storage.setItem('active_goal_id', id || '');
+        renderGoalsList();
+      });
+    });
+  };
+
+  function renderGoalCardHtml(goal: any, isActive: boolean) {
+    let icon = '🎯';
+    let color = 'var(--color-primary)';
+    let bg = 'var(--color-primary-bg)';
+    switch (goal.type) {
+      case 'race': icon = '🏔️'; color = '#3B82F6'; bg = 'rgba(59,130,246,0.1)'; break;
+      case 'ftp': icon = '⚡'; color = '#F59E0B'; bg = 'rgba(245,158,11,0.1)'; break;
+      case 'profile': icon = '🚴'; color = '#10B981'; bg = 'rgba(16,185,129,0.1)'; break;
+      case 'weight': icon = '⚖️'; color = '#8B5CF6'; bg = 'rgba(139,92,246,0.1)'; break;
+    }
+
+    const targetHtml = goal.target ? `<div style="font-size:0.85rem;color:var(--color-text-secondary);margin-top:4px;font-weight:500;">目標値: ${goal.target}</div>` : '';
+    const memoHtml = goal.memo ? `<div style="font-size:0.8rem;color:var(--color-text-muted);margin-top:6px;border-top:1px dashed var(--color-border);padding-top:6px;">${goal.memo}</div>` : '';
+    
+    return `
+      <div style="padding: 10px 0;">
+        <div style="display:flex;align-items:flex-start;gap:16px;padding:20px;background:${bg};border-radius:var(--radius-md);border:${isActive ? `2px solid ${color}` : '1px solid rgba(0,0,0,0.05)'}; position: relative;">
+          ${isActive ? `<div style="position: absolute; top: -10px; right: 20px; background: ${color}; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 700;">実行中</div>` : ''}
+          <div style="width:48px;height:48px;background:${color};border-radius:var(--radius-md);display:flex;align-items:center;justify-content:center;color:white;font-size:1.4rem;flex-shrink:0;">${icon}</div>
+          <div style="flex:1;">
+            <div style="font-weight:700;font-size:1.05rem;">${goal.name}</div>
+            <div style="font-size:0.8rem;color:${color};margin-top:2px;font-weight:600;">${goal.type === 'race' ? 'レース目標' : 'トレーニングブロック'}</div>
+            ${targetHtml}
+            ${memoHtml}
+            <div style="margin-top: 12px; display: flex; gap: 8px;">
+              ${!isActive ? `<button class="btn btn-outline btn-sm btn-set-active" data-id="${goal.id}">この目標を実行する</button>` : `
+                <button class="btn btn-primary btn-sm" onclick="window.location.hash='#/plans'">
+                  ${icons.chat} AIでこの目標のプランを作成
+                </button>
+              `}
+            </div>
+          </div>
+          <div style="text-align:right;flex-shrink:0;background:var(--color-white);padding:8px 12px;border-radius:var(--radius-sm);border:1px solid var(--color-border-light);min-width:130px; height: fit-content;">
+            <div style="font-size:0.7rem;color:var(--color-text-muted);text-transform:uppercase;margin-bottom:2px;">期間</div>
+            <div style="font-weight:700;color:${color};font-size:0.85rem;">${goal.period}</div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
   const modal = document.getElementById('goal-modal');
   const goalTypeSelect = document.getElementById('goal-type') as HTMLSelectElement;
   const periodSelect = document.getElementById('goal-period-select') as HTMLSelectElement;
   const startDateInput = document.getElementById('goal-start-date') as HTMLInputElement;
   const endDateInput = document.getElementById('goal-end-date') as HTMLInputElement;
+  const raceDateInput = document.getElementById('goal-race-date') as HTMLInputElement;
   const sectionRaceDate = document.getElementById('section-race-date');
   const sectionPeriod = document.getElementById('section-period');
   const periodDescEl = document.getElementById('period-desc');
@@ -275,82 +374,46 @@ export function initGoals() {
     e.preventDefault();
     hideModal();
 
-    const typeSelect = document.getElementById('goal-type') as HTMLSelectElement;
     const nameInput = document.getElementById('goal-name') as HTMLInputElement;
-    const raceDateInput = document.getElementById('goal-race-date') as HTMLInputElement;
     const targetInput = document.getElementById('goal-target') as HTMLInputElement;
     const memoInput = document.getElementById('goal-memo') as HTMLTextAreaElement;
 
-    const goalType = typeSelect?.value || 'race';
+    const goalId = Date.now().toString();
+    const goalType = goalTypeSelect?.value || 'race';
     const goalName = nameInput?.value || '新しい目標';
     const goalTarget = targetInput?.value || '';
     const goalMemo = memoInput?.value || '';
 
-    // Determine label for date/period
-    let dateLabel = '';
     let dateValue = '';
-    let subtitleInfo = '';
-
     if (goalType === 'race') {
-      dateLabel = 'レース当日';
       dateValue = raceDateInput?.value || '未設定';
     } else {
-      const idx = parseInt(periodSelect?.value || '0', 10);
-      const p = TRAINING_PERIODS[idx];
       const start = startDateInput?.value;
       const end = endDateInput?.value;
-      dateLabel = p ? p.label.split(' ')[0] + ' ' + p.label.split(' ')[1] : '';
       dateValue = start && end ? `${start} 〜 ${end}` : '未設定';
-      if (p?.weeks > 0) {
-        subtitleInfo = `${p.weeks}週間のトレーニングブロック`;
-      }
     }
 
-    let icon = '🎯';
-    let color = 'var(--color-primary)';
-    let bg = 'var(--color-primary-bg)';
-
-    switch (goalType) {
-      case 'race': icon = '🏔️'; color = '#3B82F6'; bg = 'rgba(59,130,246,0.1)'; break;
-      case 'ftp': icon = '⚡'; color = '#F59E0B'; bg = 'rgba(245,158,11,0.1)'; break;
-      case 'profile': icon = '🚴'; color = '#10B981'; bg = 'rgba(16,185,129,0.1)'; break;
-      case 'weight': icon = '⚖️'; color = '#8B5CF6'; bg = 'rgba(139,92,246,0.1)'; break;
+    // Save to storage
+    const saved = JSON.parse(storage.getItem('user_goals') || '[]');
+    const newGoal = { id: goalId, type: goalType, name: goalName, period: dateValue, target: goalTarget, memo: goalMemo };
+    saved.unshift(newGoal);
+    storage.setItem('user_goals', JSON.stringify(saved.slice(0, 20)));
+    
+    // Automatically set as active if it's the first one
+    if (saved.length === 1) {
+      storage.setItem('active_goal_id', goalId);
     }
 
-    const targetHtml = goalTarget ? `<div style="font-size:0.85rem;color:var(--color-text-secondary);margin-top:4px;font-weight:500;">目標値: ${goalTarget}</div>` : '';
-    const subtitleHtml = subtitleInfo ? `<div style="font-size:0.8rem;color:${color};margin-top:2px;font-weight:600;">${subtitleInfo}</div>` : '';
-    const memoHtml = goalMemo ? `<div style="font-size:0.8rem;color:var(--color-text-muted);margin-top:6px;border-top:1px dashed var(--color-border);padding-top:6px;">${goalMemo}</div>` : '';
-
-    const container = document.getElementById('goals-container');
-    if (container) {
-      const emptyState = container.querySelector('.empty-state');
-      if (emptyState) emptyState.remove();
-
-      const newGoalCard = document.createElement('div');
-      newGoalCard.style.padding = '10px 0';
-      newGoalCard.innerHTML = `
-        <div style="display:flex;align-items:flex-start;gap:16px;padding:20px;background:${bg};border-radius:var(--radius-md);border:1px solid rgba(0,0,0,0.05);">
-          <div style="width:48px;height:48px;background:${color};border-radius:var(--radius-md);display:flex;align-items:center;justify-content:center;color:white;font-size:1.4rem;flex-shrink:0;">${icon}</div>
-          <div style="flex:1;">
-            <div style="font-weight:700;font-size:1.05rem;">${goalName}</div>
-            ${subtitleHtml}
-            ${targetHtml}
-            ${memoHtml}
-          </div>
-          <div style="text-align:right;flex-shrink:0;background:var(--color-white);padding:8px 12px;border-radius:var(--radius-sm);border:1px solid var(--color-border-light);min-width:130px;">
-            <div style="font-size:0.7rem;color:var(--color-text-muted);text-transform:uppercase;margin-bottom:2px;">${dateLabel || '期間'}</div>
-            <div style="font-weight:700;color:${color};font-size:0.85rem;">${dateValue}</div>
-          </div>
-        </div>
-      `;
-      container.insertBefore(newGoalCard, container.firstChild);
-
-      // Save to localStorage for AI context use
-      const saved = JSON.parse(localStorage.getItem('user_goals') || '[]');
-      saved.unshift({ type: goalType, name: goalName, period: dateValue, target: goalTarget });
-      localStorage.setItem('user_goals', JSON.stringify(saved.slice(0, 20)));
-    }
-
+    renderGoalsList();
     (document.getElementById('goal-form') as HTMLFormElement)?.reset();
+    
+    // Prompt for plan generation
+    setTimeout(() => {
+        if (confirm(`目標「${goalName}」を作成しました！\nこの目標に向けた週次トレーニングプランをAIで生成しますか？`)) {
+            window.location.hash = '#/plans';
+        }
+    }, 100);
   });
+
+  renderGoalsList();
 }
