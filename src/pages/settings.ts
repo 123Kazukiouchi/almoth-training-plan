@@ -30,20 +30,21 @@ export function renderSettings(): string {
         <div class="card">
           <div class="settings-form">
             <div class="form-group">
-              <label class="form-label">表示名</label>
+                <label class="form-label">同期用アカウント (読取専用)</label>
+                <div style="display: flex; align-items: center; gap: 8px; padding: 10px; background: var(--color-primary-bg); border-radius: var(--radius-sm); border: 1px solid var(--color-primary-light);">
+                    <span style="color: var(--color-primary);">${icons.activity}</span>
+                    <span style="font-weight: 600; color: var(--color-text-primary);">${storage.getItem('user_email') || email}</span>
+                    <span style="font-size: 0.7rem; background: var(--color-primary); color: white; padding: 2px 6px; border-radius: 4px; margin-left: auto;">認証済</span>
+                </div>
+                <p style="font-size: 0.75rem; color: var(--color-text-muted); margin-top: 4px;">※ ログイン時のメールアドレスが自動的に連携されます。変更する場合は一度ログアウトしてください。</p>
+            </div>
+            <div class="form-group">
+              <label class="form-label">表示名 (自動)</label>
               <input class="form-input" type="text" value="${displayName}" disabled />
             </div>
             <div class="form-group">
-              <label class="form-label">メールアドレス</label>
-              <input class="form-input" type="email" value="${email}" disabled />
-            </div>
-            <div class="form-group">
-              <label class="form-label">生年月日</label>
-              <input class="form-input" type="date" value="1990-01-15" />
-            </div>
-            <div class="form-group">
               <label class="form-label">体重 (kg)</label>
-              <input class="form-input" type="number" id="input-weight" placeholder="例: 65" />
+              <input class="form-input" type="number" id="input-weight" placeholder="例: 65" step="0.1" />
             </div>
             <div class="form-group">
               <label class="form-label">FTP (W)</label>
@@ -184,6 +185,16 @@ export function renderSettings(): string {
       <div class="settings-section">
         <h2 class="settings-section-title">アカウント</h2>
         <div class="card">
+          <div style="display: flex; align-items: center; justify-content: space-between; padding-bottom: 16px; border-bottom: 1px solid var(--color-border-light); margin-bottom: 16px;">
+            <div>
+              <div style="font-weight: 600;">クラウド同期設定</div>
+              <div id="sync-status" style="font-size: 0.8rem; color: var(--color-text-muted); margin-top: 4px;">最終同期: ---</div>
+              <div id="sync-error" style="font-size: 0.8rem; color: var(--color-danger); display: none; margin-top: 4px;"></div>
+            </div>
+            <button class="btn btn-outline btn-sm" id="btn-force-pull">
+                ${icons.sync} 今すぐ同期 (クラウドから取得)
+            </button>
+          </div>
           <div style="display: flex; align-items: center; justify-content: space-between; padding-bottom: 16px; border-bottom: 1px solid var(--color-border-light); margin-bottom: 16px;">
             <div>
               <div style="font-weight: 600;">ログアウト</div>

@@ -92,6 +92,11 @@ supabase.auth.onAuthStateChange(async (_event, session) => {
     };
     localStorage.setItem(SESSION_KEY, JSON.stringify(user));
     
+    // Explicitly link authenticated email to profile storage
+    if (user.email) {
+      storage.setItem('user_email', user.email);
+    }
+    
     // Migrate data from guest to user account
     await storage.migrateGuestToUser();
     
@@ -100,8 +105,8 @@ supabase.auth.onAuthStateChange(async (_event, session) => {
     storage.setItem('_last_sync_time', Date.now().toString());
 
     // Force refresh if on dashboard to show latest synced data
-    if (window.location.hash === '#/dashboard' || window.location.hash === '') {
-        window.dispatchEvent(new CustomEvent('route-changed', { detail: { path: '/dashboard' } }));
+    if (window.location.hash === '#/dashboard' || window.location.hash === '' || window.location.hash === '#/') {
+        window.location.reload(); // Hard reload to ensure all states are clean
     }
   } else {
     localStorage.removeItem(SESSION_KEY);
