@@ -28,7 +28,7 @@ export async function handleRouteChange() {
   const path = getCurrentRoute();
   
   // Auth Guard
-  const user = getCurrentUser();
+  const user = await getCurrentUser();
   if (!user && path !== '/login') {
     window.location.hash = '/login';
     return;

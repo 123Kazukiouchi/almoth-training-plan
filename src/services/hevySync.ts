@@ -1,5 +1,6 @@
 // Hevy API integration service
 // API Endpoint: https://api.hevyapp.com/v1/workouts
+import { storage } from '../utils/storage';
 
 export interface HevySet {
     index: number;
