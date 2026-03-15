@@ -22,13 +22,13 @@ export function getCurrentRoute(): string {
   return window.location.hash.slice(1) || '/login';
 }
 
-import { getCurrentUser } from './services/authService';
+import { getCachedUser } from './services/authService';
 
 export async function handleRouteChange() {
   const path = getCurrentRoute();
   
-  // Auth Guard
-  const user = await getCurrentUser();
+  // Auth Guard (sync - reads from localStorage, no network needed)
+  const user = getCachedUser();
   if (!user && path !== '/login') {
     window.location.hash = '/login';
     return;
