@@ -451,7 +451,22 @@ export async function initDashboard() {
 
                 latestW = wellnessData[wellnessData.length - 1] || {} as IntervalsWellness;
                 let weight = latestW.weight != null ? latestW.weight : parseFloat(storage.getItem('user_weight') || '0');
-                
+
+                // Prefer Intervals.icu official CTL/ATL/TSB over local calculation
+                const ictlNow = latestW.ctl != null ? latestW.ctl : latestMetrics.ctl;
+                const iatlNow = latestW.atl != null ? latestW.atl : latestMetrics.atl;
+                const itsbNow = latestW.tsb != null ? latestW.tsb : latestMetrics.tsb;
+
+                // 7日前のwellness値を取得
+                const weekAgoWellness = wellnessData.find(w => w.date && w.date.startsWith(weekAgoStr));
+                const ictlPrev = weekAgoWellness?.ctl != null ? weekAgoWellness.ctl : weekAgoMetrics.ctl;
+                const iatlPrev = weekAgoWellness?.atl != null ? weekAgoWellness.atl : weekAgoMetrics.atl;
+                const itsbPrev = weekAgoWellness?.tsb != null ? weekAgoWellness.tsb : weekAgoMetrics.tsb;
+
+                // FTP: wellness から最新値を取得してストレージにも保存
+                const latestFtp = latestW.ftp || parseInt(storage.getItem('user_ftp') || '0') || null;
+                if (latestW.ftp) storage.setItem('user_ftp', latestW.ftp.toString());
+
                 let sleepStr = '-';
                 if (latestW.sleepSecs) {
                     const hrs = Math.floor(latestW.sleepSecs / 3600);
@@ -460,13 +475,13 @@ export async function initDashboard() {
                 }
 
                 const currentMetrics = [
-                    { label: 'Fitness', labelEn: 'Fitness', value: Math.round(latestMetrics.ctl), sub: `7日前: ${Math.round(weekAgoMetrics.ctl)}`, iconColor: '#10B981' },
-                    { label: 'Fatigue', labelEn: 'Fatigue', value: Math.round(latestMetrics.atl), sub: `7日前: ${Math.round(weekAgoMetrics.atl)}`, iconColor: '#3B82F6' },
-                    { label: 'Form', labelEn: 'Form', value: Math.round(latestMetrics.tsb), sub: `7日前: ${Math.round(weekAgoMetrics.tsb)}`, iconColor: '#A855F7' },
+                    { label: 'Fitness', labelEn: 'Fitness', value: Math.round(ictlNow), sub: `7日前: ${Math.round(ictlPrev)}`, iconColor: '#10B981' },
+                    { label: 'Fatigue', labelEn: 'Fatigue', value: Math.round(iatlNow), sub: `7日前: ${Math.round(iatlPrev)}`, iconColor: '#3B82F6' },
+                    { label: 'Form', labelEn: 'Form', value: Math.round(itsbNow), sub: `7日前: ${Math.round(itsbPrev)}`, iconColor: '#A855F7' },
                     { label: '安静時心拍', labelEn: 'Resting HR', value: latestW.restingHR != null ? latestW.restingHR : '-', sub: 'bpm', iconColor: '#EC4899' },
                     { label: 'HRV', labelEn: 'rMSSD', value: latestW.hrv ? Math.round(latestW.hrv) : '-', sub: latestW.hrvScore ? `スコア: ${latestW.hrvScore}` : 'ms', iconColor: '#8B5CF6' },
                     { label: '睡眠', labelEn: 'Sleep', value: sleepStr, sub: latestW.sleepScore ? `スコア: ${latestW.sleepScore}` : '', iconColor: '#6366F1' },
-                    { label: 'FTP', labelEn: 'FTP', value: storage.getItem('user_ftp') || '-', sub: 'Watts', iconColor: '#F97316' },
+                    { label: 'FTP', labelEn: 'FTP', value: latestFtp ?? '-', sub: 'Watts', iconColor: '#F97316' },
                     { label: '体重', labelEn: 'Weight', value: weight > 0 ? weight : '-', sub: `体脂肪: ${latestW.bodyFat ? latestW.bodyFat + '%' : '-'}`, iconColor: '#F43F5E' }
                 ];
                 renderMetrics(currentMetrics);
@@ -480,18 +495,19 @@ export async function initDashboard() {
                 const chartFtp: number[] = [];
 
                 // Use the dates from completeDailyLoads to ensure continuous chart
+                const storedFtp = parseInt(storage.getItem('user_ftp') || '0');
                 completeDailyLoads.forEach(l => {
                     const d = new Date(l.date);
                     chartLabels.push(`${d.getMonth()+1}/${d.getDate()}`);
                     const m = loadHistory.get(l.date)!;
-                    chartFitness.push(m.ctl);
-                    chartFatigue.push(m.atl);
-                    chartForm.push(m.tsb);
-                    
-                    // Match with wellness data if possible for HR/FTP
-                    const w = wellnessData.find(wd => wd.date.startsWith(l.date));
+
+                    // Prefer Intervals.icu wellness CTL/ATL/TSB over local calculation
+                    const w = wellnessData.find(wd => wd.date && wd.date.startsWith(l.date));
+                    chartFitness.push(w?.ctl ?? m.ctl);
+                    chartFatigue.push(w?.atl ?? m.atl);
+                    chartForm.push(w?.tsb ?? m.tsb);
                     chartHr.push(w?.restingHR || null);
-                    chartFtp.push(w?.ftp || parseInt(storage.getItem('user_ftp') || '0'));
+                    chartFtp.push(w?.ftp || storedFtp);
                 });
 
                 renderChart({ 
