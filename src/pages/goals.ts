@@ -261,7 +261,7 @@ export function initGoals() {
             ${memoHtml}
             <div style="margin-top: 12px; display: flex; gap: 8px;">
               ${!isActive ? `<button class="btn btn-outline btn-sm btn-set-active" data-id="${goal.id}">この目標を実行する</button>` : `
-                <button class="btn btn-primary btn-sm" onclick="window.location.hash='#/plans'">
+                <button class="btn btn-primary btn-sm" onclick="requestPlanForGoal('${goal.id}')">
                   ${icons.chat} AIでこの目標のプランを作成
                 </button>
               `}
@@ -417,3 +417,9 @@ export function initGoals() {
 
   renderGoalsList();
 }
+
+// Global: called from inline onclick in goal card
+(window as any).requestPlanForGoal = (goalId: string) => {
+  sessionStorage.setItem('pending_goal_id', goalId);
+  window.location.hash = '#/plans';
+};

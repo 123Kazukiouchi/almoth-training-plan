@@ -193,38 +193,106 @@ export function renderPlans(): string {
   `;
 }
 
+/** 目標の期間から残り週数を計算 */
+function calcWeeksFromGoal(goal: any): number | null {
+  if (!goal.period || goal.period === '未設定') return null;
+  const today = new Date();
+
+  if (goal.type === 'race') {
+    // race の period はレース日 "YYYY-MM-DD"
+    const raceDate = new Date(goal.period);
+    if (isNaN(raceDate.getTime())) return null;
+    const weeks = Math.round((raceDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24 * 7));
+    return weeks > 0 ? weeks : null;
+  } else {
+    // period: "YYYY-MM-DD 〜 YYYY-MM-DD"
+    const parts = goal.period.split('〜').map((s: string) => s.trim());
+    if (parts.length !== 2) return null;
+    const start = new Date(parts[0]);
+    const end = new Date(parts[1]);
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) return null;
+    return Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24 * 7));
+  }
+}
+
+/** 目標オブジェクトからプランモーダルのフィールドを自動埋め */
+function fillFromGoal(goal: any) {
+  if (!goal) return;
+
+  // 目的タイプのマッピング
+  const typeMap: Record<string, string> = { ftp: 'ftp', race: 'race', profile: 'climbing', weight: 'weight', other: 'custom' };
+  const goalTypeEl = document.getElementById('plan-goal-type') as HTMLSelectElement;
+  if (goalTypeEl && typeMap[goal.type]) goalTypeEl.value = typeMap[goal.type];
+
+  // 期間を自動選択（最近接の選択肢）
+  const weeks = calcWeeksFromGoal(goal);
+  if (weeks) {
+    const durationEl = document.getElementById('plan-duration') as HTMLSelectElement;
+    if (durationEl) {
+      const options = [4, 6, 8, 12, 16];
+      const closest = options.reduce((prev, curr) => Math.abs(curr - weeks) < Math.abs(prev - weeks) ? curr : prev);
+      durationEl.value = closest.toString();
+    }
+  }
+
+  // 追加情報テキストエリアに目標詳細を自動挿入
+  const extraEl = document.getElementById('plan-extra') as HTMLTextAreaElement;
+  if (extraEl) {
+    let lines = [`目標: ${goal.name}`];
+    if (goal.target) lines.push(`目標値: ${goal.target}`);
+    if (goal.period && goal.period !== '未設定') lines.push(`期間: ${goal.period}`);
+    if (weeks) lines.push(`残り期間: 約${weeks}週間`);
+    if (goal.memo) lines.push(`備考: ${goal.memo}`);
+    extraEl.value = lines.join('\n');
+  }
+}
+
+/** モーダルを開いて目標を指定IDで選択し、フィールドを連動 */
+function openPlanModal(targetGoalId?: string) {
+  const modal = document.getElementById('plan-modal');
+  const goalsSelect = document.getElementById('plan-linked-goal') as HTMLSelectElement;
+  const savedGoals = JSON.parse(storage.getItem('user_goals') || '[]');
+  const activeGoalId = storage.getItem('active_goal_id');
+
+  if (goalsSelect) {
+    goalsSelect.innerHTML = '<option value="">-- 目標を選択しない --</option>' +
+      savedGoals.map((g: any, i: number) => `<option value="${i}">${g.name} (${g.period})</option>`).join('');
+
+    // 指定 or アクティブ目標を選択
+    const selectId = targetGoalId || activeGoalId;
+    if (selectId) {
+      const idx = savedGoals.findIndex((g: any) => g.id === selectId);
+      if (idx !== -1) {
+        goalsSelect.value = idx.toString();
+        fillFromGoal(savedGoals[idx]);
+      }
+    }
+  }
+
+  if (modal) modal.style.display = 'flex';
+  showWizardStep(1);
+}
+
 export function initPlans() {
   const modal = document.getElementById('plan-modal');
 
-  document.getElementById('btn-create-plan')?.addEventListener('click', () => {
-    // Populate goals dropdown
+  // 目標ページからの連携: sessionStorageに pending_goal_id があれば自動でモーダルを開く
+  const pendingGoalId = sessionStorage.getItem('pending_goal_id');
+  if (pendingGoalId) {
+    sessionStorage.removeItem('pending_goal_id');
+    setTimeout(() => openPlanModal(pendingGoalId), 50);
+  }
+
+  document.getElementById('btn-create-plan')?.addEventListener('click', () => openPlanModal());
+
+  // 目標選択が変わったときにフィールドを連動
+  document.getElementById('plan-linked-goal')?.addEventListener('change', () => {
     const goalsSelect = document.getElementById('plan-linked-goal') as HTMLSelectElement;
-    if (goalsSelect) {
-      const savedGoals = JSON.parse(storage.getItem('user_goals') || '[]');
-      const activeGoalId = storage.getItem('active_goal_id');
-      
-      goalsSelect.innerHTML = '<option value="">-- 目標を選択しない --</option>' + 
-        savedGoals.map((g: any, i: number) => {
-          const isSelected = g.id === activeGoalId ? 'selected' : '';
-          return `<option value="${i}" ${isSelected}>${g.name} (${g.period})</option>`;
-        }).join('');
-
-      // If active goal selected, try to pre-fill some fields
-      if (activeGoalId) {
-        const activeGoal = savedGoals.find((g: any) => g.id === activeGoalId);
-        if (activeGoal) {
-          const goalTypeEl = document.getElementById('plan-goal-type') as HTMLSelectElement;
-          if (goalTypeEl && activeGoal.type) {
-             // Map goal type if possible
-             const typeMap: any = { 'ftp': 'ftp', 'race': 'race', 'profile': 'climbing', 'weight': 'weight' };
-             if (typeMap[activeGoal.type]) goalTypeEl.value = typeMap[activeGoal.type];
-          }
-        }
-      }
+    const savedGoals = JSON.parse(storage.getItem('user_goals') || '[]');
+    const idx = parseInt(goalsSelect.value, 10);
+    if (!isNaN(idx) && savedGoals[idx]) {
+      fillFromGoal(savedGoals[idx]);
     }
-
-    if (modal) modal.style.display = 'flex';
-    showWizardStep(1);
   });
 
   document.getElementById('cancel-plan-modal')?.addEventListener('click', () => {
@@ -283,7 +351,17 @@ async function generatePlan() {
     const savedGoals = JSON.parse(storage.getItem('user_goals') || '[]');
     const goal = savedGoals[parseInt(linkedGoalIdx)];
     if (goal) {
-      linkedGoalInfo = `【関連目標】\n- 目標名: ${goal.name}\n- 期間: ${goal.period}\n- ターゲット値: ${goal.target || 'なし'}\n`;
+      const goalTypeLabels: Record<string, string> = { race: 'レース出場・完走', ftp: 'FTP向上', profile: '脚質強化', weight: '減量・フィットネス向上', other: 'トレーニングブロック' };
+      const weeks = calcWeeksFromGoal(goal);
+      linkedGoalInfo = [
+        '【関連目標】',
+        `- 目標名: ${goal.name}`,
+        `- 目標タイプ: ${goalTypeLabels[goal.type] || goal.type}`,
+        `- 設定期間: ${goal.period}`,
+        weeks ? `- 今日から目標日まで: 約${weeks}週間` : '',
+        goal.target ? `- 具体的な目標値: ${goal.target}` : '',
+        goal.memo ? `- 目標へのメモ: ${goal.memo}` : '',
+      ].filter(Boolean).join('\n') + '\n\n';
     }
   }
 
