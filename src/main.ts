@@ -112,6 +112,14 @@ supabase.auth.onAuthStateChange(async (_event, session) => {
         setTimeout(() => window.location.reload(), 100);
     }
   } else {
+    // Don't wipe dev sessions (set by devLogin() for local development)
+    const existing = localStorage.getItem(SESSION_KEY);
+    if (existing) {
+      try {
+        const parsed = JSON.parse(existing);
+        if (parsed.id && parsed.id.startsWith('dev-user-')) return;
+      } catch {}
+    }
     localStorage.removeItem(SESSION_KEY);
   }
 });

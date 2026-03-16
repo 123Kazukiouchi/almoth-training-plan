@@ -1,5 +1,10 @@
-import { getStoragePrefixSync, getCurrentUser } from '../services/authService';
+import { getStoragePrefixSync, getCurrentUser, getCachedUser } from '../services/authService';
 import { supabase } from './supabaseClient';
+
+function isDevSession(): boolean {
+    const user = getCachedUser();
+    return !!user && user.id.startsWith('dev-user-');
+}
 
 export const storage = {
     setItem(key: string, value: string) {
@@ -27,6 +32,7 @@ export const storage = {
     },
 
     async pushToCloud(key: string, value: string) {
+        if (isDevSession()) return; // skip cloud sync in dev mode
         const user = await getCurrentUser();
         if (!user) return;
 
@@ -49,6 +55,7 @@ export const storage = {
     },
 
     async removeFromCloud(key: string) {
+        if (isDevSession()) return; // skip cloud sync in dev mode
         const user = await getCurrentUser();
         if (!user) return;
 
@@ -62,6 +69,7 @@ export const storage = {
      * Pulls all data for the current user from Supabase and overwrites local storage
      */
     async pullAll(): Promise<{ success: boolean; error?: any }> {
+        if (isDevSession()) return { success: true }; // skip cloud sync in dev mode
         const user = await getCurrentUser();
         if (!user) return { success: false, error: 'User not logged in' };
 
