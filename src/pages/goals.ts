@@ -101,9 +101,11 @@ export function renderGoals(): string {
       </div>
       
       <div class="modal-overlay" id="goal-modal" style="display:none;">
-        <div class="modal" style="max-width: 560px; width: 95%;">
-          <h2 class="modal-title">新規目標を作成</h2>
-          <form id="goal-form">
+        <div class="modal" style="max-width: 560px; width: 95%; max-height: 90vh; display: flex; flex-direction: column; padding: 0; overflow: hidden;">
+          <div style="padding: 20px 24px 16px; border-bottom: 1px solid var(--color-border-light); flex-shrink: 0;">
+            <h2 class="modal-title" style="margin: 0;">新規目標を作成</h2>
+          </div>
+          <form id="goal-form" style="overflow-y: auto; padding: 20px 24px; flex: 1; min-height: 0;">
             <div class="form-group" style="margin-bottom:16px;">
               <label class="form-label">目標タイプ</label>
               <select class="form-input" id="goal-type">
@@ -195,15 +197,15 @@ export function renderGoals(): string {
               <label class="form-label">具体的な数値目標 (任意)</label>
               <input class="form-input" type="text" id="goal-target" placeholder="例: 1:30:00, 250W, 65kg など" />
             </div>
-            <div class="form-group" style="margin-bottom:16px;">
+            <div class="form-group" style="margin-bottom:8px;">
               <label class="form-label">メモ</label>
               <textarea class="form-input" id="goal-memo" rows="2" placeholder="目標達成に向けた意気込みや課題..."></textarea>
             </div>
-            <div class="modal-actions">
-              <button type="button" class="btn btn-outline" id="cancel-goal">キャンセル</button>
-              <button type="submit" class="btn btn-primary">作成</button>
-            </div>
           </form>
+          <div style="padding: 12px 24px 16px; border-top: 1px solid var(--color-border-light); flex-shrink: 0; display: flex; justify-content: flex-end; gap: 8px; background: var(--color-white);">
+            <button type="button" class="btn btn-outline" id="cancel-goal">キャンセル</button>
+            <button type="submit" form="goal-form" class="btn btn-primary">作成</button>
+          </div>
         </div>
       </div>
     </main>
@@ -344,6 +346,15 @@ export function initGoals() {
     }
   }
 
+  /** FTPデルタから推奨週数と根拠を返す（スポーツ科学ベース） */
+  function getFtpRecommendation(delta: number): { weeks: number; label: string; reason: string } {
+    if (delta <= 7)  return { weeks: 4,  label: '4週間',  reason: '小幅な改善は短期集中のスイートスポット強化で十分達成可能です。' };
+    if (delta <= 12) return { weeks: 8,  label: '8週間',  reason: 'スイートスポット + 閾値インターバルを8週間継続することで生理的適応が安定します。' };
+    if (delta <= 18) return { weeks: 12, label: '12週間', reason: 'ベース構築 → ビルド → ピークの3フェーズで段階的にFTPを引き上げられます。' };
+    if (delta <= 25) return { weeks: 16, label: '16週間', reason: '大幅な向上は十分なベース期間が必要です。焦らず16週で着実に積み上げましょう。' };
+    return              { weeks: 20, label: '20週間', reason: '+25W超の大幅改善は20週以上の長期計画を推奨します。怪我リスク管理が重要です。' };
+  }
+
   function updateFtpPreview() {
     const deltaInput = document.getElementById('ftp-delta-value') as HTMLInputElement;
     const delta = parseInt(deltaInput?.value || '0');
@@ -364,6 +375,32 @@ export function initGoals() {
 
     // 数値目標欄を自動入力
     if (targetInput && currentFtp > 0) targetInput.value = `${targetFtp}W (現在${currentFtp}W + ${delta}W)`;
+
+    // 推奨週数を表示して期間セレクトを自動変更
+    const rec = getFtpRecommendation(delta);
+    let recBox = document.getElementById('ftp-rec-box');
+    if (!recBox) {
+      recBox = document.createElement('div');
+      recBox.id = 'ftp-rec-box';
+      preview.insertAdjacentElement('afterend', recBox);
+    }
+    recBox.innerHTML = `
+      <div style="margin-top:10px; padding:10px 14px; background:rgba(16,185,129,0.08); border:1px solid rgba(16,185,129,0.3); border-radius:var(--radius-sm); font-size:0.82rem; line-height:1.5;">
+        <div style="font-weight:700; color:var(--color-success); margin-bottom:4px;">💡 AI推奨: ${rec.label}プラン</div>
+        <div style="color:var(--color-text-secondary);">${rec.reason}</div>
+      </div>
+    `;
+
+    // 期間セレクトを推奨週数に自動変更
+    const periodSelect = document.getElementById('goal-period-select') as HTMLSelectElement;
+    if (periodSelect) {
+      const matchIdx = TRAINING_PERIODS.findIndex(p => p.weeks === rec.weeks);
+      if (matchIdx !== -1) {
+        periodSelect.value = String(matchIdx);
+        // セレクト変更イベントを手動発火して終了日・説明も更新
+        periodSelect.dispatchEvent(new Event('change'));
+      }
+    }
   }
 
   // FTPデルタボタンのイベント設定
