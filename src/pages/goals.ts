@@ -166,6 +166,31 @@ export function renderGoals(): string {
               </div>
             </div>
 
+            <!-- FTPタイプのみ: FTP目標設定 -->
+            <div id="section-ftp-target" style="display:none; margin-bottom:16px;">
+              <div style="background:var(--color-primary-bg); border:1px solid var(--color-primary-light); border-radius:var(--radius-md); padding:14px 16px;">
+                <div style="font-size:0.85rem; font-weight:700; color:var(--color-primary); margin-bottom:12px;">⚡ FTP目標の設定</div>
+                <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
+                  <div style="font-size:0.8rem; color:var(--color-text-muted);">現在のFTP:</div>
+                  <div id="ftp-current-display" style="font-weight:700; font-size:1rem; color:var(--color-text-primary);">---W</div>
+                  <div style="font-size:0.75rem; color:var(--color-text-muted);">(設定画面から取得)</div>
+                </div>
+                <div style="font-size:0.8rem; color:var(--color-text-muted); margin-bottom:8px;">目標増加量:</div>
+                <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;" id="ftp-delta-btns">
+                  ${[5, 10, 15, 20, 25, 30].map(d => `
+                    <button type="button" class="ftp-delta-btn btn btn-outline btn-sm" data-delta="${d}" style="font-weight:700; min-width:52px;">+${d}W</button>
+                  `).join('')}
+                  <input class="form-input" type="number" id="ftp-delta-custom" placeholder="カスタム" min="1" max="100"
+                    style="width:90px; padding:4px 8px; font-size:0.85rem;" />
+                </div>
+                <div id="ftp-target-preview" style="display:none; padding:10px 14px; background:var(--color-white); border-radius:var(--radius-sm); border:1px solid var(--color-border); font-size:0.9rem; font-weight:600;">
+                  現在 <span id="ftp-prev-current">---</span>W → 目標 <span id="ftp-prev-target" style="color:var(--color-primary);">---</span>W
+                  <span id="ftp-prev-delta" style="color:var(--color-success); margin-left:4px;"></span>
+                </div>
+                <input type="hidden" id="ftp-delta-value" value="" />
+              </div>
+            </div>
+
             <div class="form-group" style="margin-bottom:16px;">
               <label class="form-label">具体的な数値目標 (任意)</label>
               <input class="form-input" type="text" id="goal-target" placeholder="例: 1:30:00, 250W, 65kg など" />
@@ -289,12 +314,12 @@ export function initGoals() {
 
   const showModal = () => {
     if (modal) modal.style.display = 'flex';
-    // Set default start to today
     const today = new Date().toISOString().split('T')[0];
     if (startDateInput && !startDateInput.value) startDateInput.value = today;
     updatePeriodDesc();
     updateEndDate();
     toggleFormSections();
+    initFtpDeltaBtns();
   };
 
   const hideModal = () => {
@@ -302,9 +327,67 @@ export function initGoals() {
   };
 
   function toggleFormSections() {
-    const isRace = goalTypeSelect?.value === 'race';
+    const type = goalTypeSelect?.value;
+    const isRace = type === 'race';
+    const isFtp = type === 'ftp';
     if (sectionRaceDate) sectionRaceDate.style.display = isRace ? 'block' : 'none';
     if (sectionPeriod) sectionPeriod.style.display = isRace ? 'none' : 'block';
+
+    const ftpSection = document.getElementById('section-ftp-target');
+    if (ftpSection) ftpSection.style.display = isFtp ? 'block' : 'none';
+
+    if (isFtp) {
+      const currentFtp = parseInt(storage.getItem('user_ftp') || '0');
+      const displayEl = document.getElementById('ftp-current-display');
+      if (displayEl) displayEl.textContent = currentFtp > 0 ? `${currentFtp}W` : '未設定 (設定画面でFTPを登録してください)';
+      updateFtpPreview();
+    }
+  }
+
+  function updateFtpPreview() {
+    const deltaInput = document.getElementById('ftp-delta-value') as HTMLInputElement;
+    const delta = parseInt(deltaInput?.value || '0');
+    const currentFtp = parseInt(storage.getItem('user_ftp') || '0');
+    const preview = document.getElementById('ftp-target-preview');
+    const prevCurrent = document.getElementById('ftp-prev-current');
+    const prevTarget = document.getElementById('ftp-prev-target');
+    const prevDelta = document.getElementById('ftp-prev-delta');
+    const targetInput = document.getElementById('goal-target') as HTMLInputElement;
+
+    if (!delta || !preview) return;
+
+    const targetFtp = currentFtp + delta;
+    preview.style.display = 'block';
+    if (prevCurrent) prevCurrent.textContent = currentFtp > 0 ? String(currentFtp) : '?';
+    if (prevTarget) prevTarget.textContent = currentFtp > 0 ? String(targetFtp) : `+${delta}W`;
+    if (prevDelta) prevDelta.textContent = `(+${delta}W)`;
+
+    // 数値目標欄を自動入力
+    if (targetInput && currentFtp > 0) targetInput.value = `${targetFtp}W (現在${currentFtp}W + ${delta}W)`;
+  }
+
+  // FTPデルタボタンのイベント設定
+  function initFtpDeltaBtns() {
+    const deltaHidden = document.getElementById('ftp-delta-value') as HTMLInputElement;
+    document.querySelectorAll('.ftp-delta-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.ftp-delta-btn').forEach(b => b.classList.remove('btn-primary'));
+        btn.classList.add('btn-primary');
+        btn.classList.remove('btn-outline');
+        const delta = (btn as HTMLElement).dataset.delta || '';
+        if (deltaHidden) deltaHidden.value = delta;
+        const customInput = document.getElementById('ftp-delta-custom') as HTMLInputElement;
+        if (customInput) customInput.value = '';
+        updateFtpPreview();
+      });
+    });
+
+    document.getElementById('ftp-delta-custom')?.addEventListener('input', (e) => {
+      const val = (e.target as HTMLInputElement).value;
+      if (deltaHidden) deltaHidden.value = val;
+      document.querySelectorAll('.ftp-delta-btn').forEach(b => { b.classList.remove('btn-primary'); b.classList.add('btn-outline'); });
+      updateFtpPreview();
+    });
   }
 
   function updatePeriodDesc() {
@@ -393,9 +476,23 @@ export function initGoals() {
       dateValue = start && end ? `${start} 〜 ${end}` : '未設定';
     }
 
+    // FTP目標の追加情報
+    let ftpCurrent: number | undefined;
+    let ftpTarget: number | undefined;
+    let ftpDelta: number | undefined;
+    if (goalType === 'ftp') {
+      const deltaVal = parseInt((document.getElementById('ftp-delta-value') as HTMLInputElement)?.value || '0');
+      const currentFtp = parseInt(storage.getItem('user_ftp') || '0');
+      if (deltaVal > 0) {
+        ftpDelta = deltaVal;
+        ftpCurrent = currentFtp > 0 ? currentFtp : undefined;
+        ftpTarget = currentFtp > 0 ? currentFtp + deltaVal : undefined;
+      }
+    }
+
     // Save to storage
     const saved = JSON.parse(storage.getItem('user_goals') || '[]');
-    const newGoal = { id: goalId, type: goalType, name: goalName, period: dateValue, target: goalTarget, memo: goalMemo };
+    const newGoal = { id: goalId, type: goalType, name: goalName, period: dateValue, target: goalTarget, memo: goalMemo, ftpCurrent, ftpTarget, ftpDelta };
     saved.unshift(newGoal);
     storage.setItem('user_goals', JSON.stringify(saved.slice(0, 20)));
     

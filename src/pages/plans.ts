@@ -347,13 +347,14 @@ async function generatePlan() {
 
   // Get selected goal details
   let linkedGoalInfo = "";
+  let isFtpGoal = false;
   if (linkedGoalIdx !== "") {
     const savedGoals = JSON.parse(storage.getItem('user_goals') || '[]');
     const goal = savedGoals[parseInt(linkedGoalIdx)];
     if (goal) {
       const goalTypeLabels: Record<string, string> = { race: 'レース出場・完走', ftp: 'FTP向上', profile: '脚質強化', weight: '減量・フィットネス向上', other: 'トレーニングブロック' };
       const weeks = calcWeeksFromGoal(goal);
-      linkedGoalInfo = [
+      const lines = [
         '【関連目標】',
         `- 目標名: ${goal.name}`,
         `- 目標タイプ: ${goalTypeLabels[goal.type] || goal.type}`,
@@ -361,7 +362,23 @@ async function generatePlan() {
         weeks ? `- 今日から目標日まで: 約${weeks}週間` : '',
         goal.target ? `- 具体的な目標値: ${goal.target}` : '',
         goal.memo ? `- 目標へのメモ: ${goal.memo}` : '',
-      ].filter(Boolean).join('\n') + '\n\n';
+      ];
+
+      // FTP目標の詳細
+      if (goal.type === 'ftp' && goal.ftpDelta) {
+        isFtpGoal = true;
+        const planWeeks = parseInt(duration);
+        const weeklyGain = goal.ftpDelta / planWeeks;
+        lines.push('');
+        lines.push('【FTP向上の詳細目標】');
+        if (goal.ftpCurrent) lines.push(`- 現在のFTP: ${goal.ftpCurrent}W`);
+        if (goal.ftpTarget) lines.push(`- 目標FTP: ${goal.ftpTarget}W`);
+        lines.push(`- 増加目標: +${goal.ftpDelta}W`);
+        lines.push(`- ${planWeeks}週間で達成するには週平均 +${weeklyGain.toFixed(1)}W の向上が必要`);
+        lines.push('- FTP向上のためのメインゾーン: スイートスポット(88-93%FTP)、閾値走(95-105%FTP)、VO2max(106-120%FTP)');
+      }
+
+      linkedGoalInfo = lines.filter(Boolean).join('\n') + '\n\n';
     }
   }
 
@@ -403,6 +420,14 @@ ${extra ? `- 追加希望事項: ${extra}` : ''}
 - ウェイトトレーニングを提案に含める場合、種目名だけでなく想定する重量やセット数・回数（例: スクワット 50kg x 10回 x 3セット）など、具体的な内容も記載してください。
 - ロードバイクとウェイトトレーニングのバランスを考慮し、全体として過負荷になりすぎないように構成してください。
 - いつも同じ種目ばかりにならないよう、新しいメニューやバリエーションも積極的に取り入れてください。
+${isFtpGoal ? `
+【FTP向上プランの追加要件】
+- 各週のロードバイクメニューには必ずFTPゾーン(%)と目安パワー(W)を明記してください。
+- プログレッシブオーバーロードの原則に従い、週ごとに強度または量を段階的に引き上げてください。
+- 3週ごとに1週の回復週（負荷60〜70%）を設けてください。
+- スイートスポット走、閾値インターバル、VO2maxインターバルを週ごとに適切に配置してください。
+- 最終週はFTPテスト（20分全力走 or ランプテスト）を含めてください。
+` : ''}
 
 【出力形式】
 必ず以下の構造で日本語で回答してください：
