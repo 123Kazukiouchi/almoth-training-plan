@@ -28,6 +28,12 @@ export function renderLogin(): string {
           </div>
           <h1 class="login-title">ログイン</h1>
           <p class="login-subtitle">Almoth TrainingPlan にサインイン</p>
+          
+          ${window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? `
+            <div style="margin-top: 12px; padding: 10px; background: rgba(255, 193, 7, 0.15); border: 1px solid #ffc107; border-radius: var(--radius-sm); color: #856404; font-size: 0.75rem; text-align: left;">
+              ⚠️ 現在ローカル(localhost)で実行中です。ここから送信されるログインリンクはスマホでは開きません。スマホで同期する場合は <b>VercelのURL</b> から送信してください。
+            </div>
+          ` : ''}
         </div>
         
         <div id="login-feedback" style="display: none; margin-bottom: 16px; padding: 12px; border-radius: var(--radius-md); font-size: 0.85rem; line-height: 1.5;"></div>

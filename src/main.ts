@@ -104,9 +104,12 @@ supabase.auth.onAuthStateChange(async (_event, session) => {
     await storage.pullAll();
     storage.setItem('_last_sync_time', Date.now().toString());
 
-    // Force refresh if on dashboard to show latest synced data
-    if (window.location.hash === '#/dashboard' || window.location.hash === '' || window.location.hash === '#/') {
-        window.location.reload(); // Hard reload to ensure all states are clean
+    // Force transition to dashboard on login
+    const currentHash = window.location.hash;
+    if (currentHash.includes('access_token') || currentHash === '#/login' || currentHash === '' || currentHash === '#/') {
+        window.location.hash = '#/dashboard';
+        // Give router a tiny moment to see the hash change before reloading
+        setTimeout(() => window.location.reload(), 100);
     }
   } else {
     localStorage.removeItem(SESSION_KEY);
