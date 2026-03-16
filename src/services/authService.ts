@@ -82,6 +82,21 @@ export function getStoragePrefixSync(): string {
 }
 
 /**
+ * Dev-only: bypass email OTP and set a fake local session (localhost only)
+ */
+export function devLogin(email: string): void {
+    const SESSION_KEY = 'almoth_auth_session';
+    const fakeUser: UserProfile = {
+        email,
+        id: 'dev-user-' + email.replace(/[^a-z0-9]/gi, '-'),
+        lastLogin: Date.now()
+    };
+    localStorage.setItem(SESSION_KEY, JSON.stringify(fakeUser));
+    window.location.hash = '#/dashboard';
+    setTimeout(() => window.location.reload(), 50);
+}
+
+/**
  * Listen for auth changes and sync with local session
  */
 // This space intentionally left to be handled in main.ts to avoid circular deps

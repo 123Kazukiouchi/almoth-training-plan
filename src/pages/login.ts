@@ -1,5 +1,5 @@
 import { icons } from '../components/icons';
-import { loginWithEmail, signInWithGoogle, getCachedUser } from '../services/authService';
+import { loginWithEmail, signInWithGoogle, getCachedUser, devLogin } from '../services/authService';
 
 export function renderLogin(): string {
     const user = getCachedUser();
@@ -53,11 +53,20 @@ export function renderLogin(): string {
         </form>
         
         <div class="login-divider" style="margin-top: 24px;">または</div>
-        
+
         <button class="google-btn" id="google-login-btn" style="margin-top: 16px;">
           ${icons.google}
           <span>Google でログイン</span>
         </button>
+
+        ${window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? `
+          <div style="margin-top: 24px; padding: 12px; background: rgba(255, 193, 7, 0.1); border: 1px dashed #ffc107; border-radius: var(--radius-md);">
+            <p style="font-size: 0.7rem; color: #856404; margin: 0 0 8px 0; text-align: center;">🛠️ 開発用 (localhost のみ表示)</p>
+            <button id="dev-login-btn" style="width: 100%; padding: 10px; background: #ffc107; color: #212529; border: none; border-radius: var(--radius-sm); font-size: 0.85rem; font-weight: 600; cursor: pointer;">
+              メール送信なしでログイン (Dev)
+            </button>
+          </div>
+        ` : ''}
       </div>
     </div>
   `;
@@ -67,6 +76,16 @@ export function initLogin() {
     const form = document.getElementById('login-form') as HTMLFormElement;
     const feedback = document.getElementById('login-feedback');
     const loginBtn = document.getElementById('login-btn') as HTMLButtonElement;
+
+    // Show error passed from router (e.g. expired OTP link)
+    const authError = sessionStorage.getItem('auth_error');
+    if (authError && feedback) {
+        sessionStorage.removeItem('auth_error');
+        feedback.style.display = 'block';
+        feedback.style.background = 'var(--color-danger-bg)';
+        feedback.style.color = 'var(--color-danger)';
+        feedback.innerText = 'ログインリンクが無効または期限切れです。再度お試しください。(' + authError + ')';
+    }
 
     form?.addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -115,5 +134,11 @@ export function initLogin() {
     googleBtn?.addEventListener('click', async () => {
         const { error } = await signInWithGoogle();
         if (error) alert('Googleログインエラー: ' + error.message);
+    });
+
+    const devBtn = document.getElementById('dev-login-btn');
+    devBtn?.addEventListener('click', () => {
+        const email = (document.getElementById('email') as HTMLInputElement).value || 'dev@localhost';
+        devLogin(email);
     });
 }

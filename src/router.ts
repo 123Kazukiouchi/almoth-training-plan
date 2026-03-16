@@ -25,8 +25,25 @@ export function getCurrentRoute(): string {
 import { getCachedUser } from './services/authService';
 
 export async function handleRouteChange() {
+  const hash = window.location.hash.slice(1); // e.g. "error=access_denied&..." or "/dashboard"
+
+  // Supabase returns errors/tokens as query-string-style hash fragments (not routes)
+  if (hash.includes('error=') || hash.includes('access_token=')) {
+    const params = new URLSearchParams(hash);
+    if (params.get('error')) {
+      // Store the error so login page can display it, then go to login
+      const desc = params.get('error_description') || params.get('error') || 'ログインエラーが発生しました';
+      sessionStorage.setItem('auth_error', decodeURIComponent(desc.replace(/\+/g, ' ')));
+      window.location.hash = '/login';
+      return;
+    }
+    // access_token case is handled by Supabase SDK via onAuthStateChange — just go to login
+    window.location.hash = '/login';
+    return;
+  }
+
   const path = getCurrentRoute();
-  
+
   // Auth Guard (sync - reads from localStorage, no network needed)
   const user = getCachedUser();
   if (!user && path !== '/login') {
